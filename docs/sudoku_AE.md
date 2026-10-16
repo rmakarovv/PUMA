@@ -46,17 +46,23 @@ so one run takes about 1.6–1.8 h.
 ## Reproducing / continuing
 All commands run from the repo root on the cluster.
 
-1. **Environment.** Any Python with a CUDA build of PyTorch 2.x works. We used a venv layered on an
-   existing conda env (PyTorch 2.13 + cu129), so torch is not reinstalled:
+1. **Environment.** `scripts/setup_env.sh` creates `.venv` from `requirements.txt`. The versions
+   are pinned to those used for the runs, and torch is the CUDA 12.9 build, which works with the
+   cluster's driver 570. It needs Python >= 3.10, but the login node's default `python3` is 3.8,
+   so pass one explicitly:
    ```bash
-   python -m venv --system-site-packages .venv
-   .venv/bin/pip install omegaconf wandb datasets transformers gdown
+   conda create -y -n puma python=3.11
+   BASE_PYTHON=$(conda run -n puma which python) bash scripts/setup_env.sh
    ```
-2. **Data.** Download PUMA's Sudoku files into `data/sudoku_new/`, then build the caches.
-   `data/sudoku.py` would otherwise convert ~1.8M puzzles serially on first use, which takes
+   To reuse an interpreter that already has a CUDA torch, add `REUSE_TORCH=1`. This is how the
+   runs' `.venv` was built, on a conda env with torch 2.13.0+cu129. Check CUDA on a compute node
+   with `mkdir -p runs/logs && sbatch scripts/cuda_diag.sbatch`.
+2. **Data.** `scripts/download_sudoku.sh` fetches PUMA's two Sudoku files from Google Drive into
+   `data/sudoku_new/` (about 5 GB) and checks their shapes. Then build the training caches on a CPU
+   node. `data/sudoku.py` would otherwise convert ~1.8M puzzles serially on first use, which takes
    about 85 min, and each DDP rank would race to write the same file.
    ```bash
-   .venv/bin/gdown --folder https://drive.google.com/drive/folders/1VNg6G9faB4FIoFv_9ktspYHURokLKumb -O data/sudoku_new
+   bash scripts/download_sudoku.sh
    mkdir -p runs/logs
    sbatch scripts/preprocess_sudoku.sbatch
    ```
