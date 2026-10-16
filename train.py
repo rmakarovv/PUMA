@@ -26,7 +26,7 @@ from eval.gsm8k_eval import evaluate_ddp_gsm8k
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", type=str)
-    return parser.parse_args()
+    return parser.parse_known_args() # extra args are OmegaConf dotlist overrides, e.g. training.seed=1
 
 
 def setup_ddp():
@@ -241,10 +241,15 @@ def main(cfg: DictConfig):
     torch.cuda.manual_seed(seed)
 
     # ckpt dir
-    ckpt_dir = f"ckpts/date={datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+    ckpt_dir = getattr(cfg.training, "ckpt_dir", None) or f"ckpts/date={datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}"
     os.makedirs(ckpt_dir, exist_ok=True)
+    metrics_path = os.path.join(ckpt_dir, "metrics.jsonl")
+    def log_metrics(**kw):
+        with open(metrics_path, "a") as f:
+            f.write(json.dumps(kw) + "\n")
     if is_main:
         print(f"Checkpoints will be saved to: {ckpt_dir}")
+        OmegaConf.save(cfg, os.path.join(ckpt_dir, "config.yaml"))
 
     # set device
     if torch.cuda.is_available():
@@ -295,7 +300,8 @@ def main(cfg: DictConfig):
             train_loader.dataset,
             num_replicas=world_size,
             rank=rank,
-            shuffle=True
+            shuffle=True,
+            seed=base_seed, # vary the data order with the training seed (default sampler seed is 0)
         )
         train_loader = DataLoader(
             train_loader.dataset,
@@ -352,6 +358,8 @@ def main(cfg: DictConfig):
                 confidence_threshold=train_cfg.confidence_threshold,
                 eos_id=train_cfg.eos_id,
                 prompt_only_reset=prompt_only_reset,
+                mask_schedule=getattr(train_cfg, "mask_schedule", None),
+                random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
             )
         pool = make_pool(current_k)
         next_k_idx = 1
@@ -359,6 +367,7 @@ def main(cfg: DictConfig):
 
     # training loop
     global_step = 0
+    t_start, eval_time = time.time(), 0.0 # train_time_s = wall time since start minus evaluation time
 
         
     # wandb initialize
@@ -434,6 +443,8 @@ def main(cfg: DictConfig):
 
                 if global_step % train_cfg.logging_steps == 0:
                     print(f"Epoch {epoch+1}, Step {global_step}, Loss {loss.item()}")
+                    log_metrics(step=global_step, epoch=epoch+1, loss=loss.item(), lr=optimizer.param_groups[0]["lr"],
+                                train_time_s=time.time() - t_start - eval_time)
                     if cfg.wandb.wandb:
                         wandb.log({"loss": loss.item()}, step=global_step)
 
@@ -443,7 +454,8 @@ def main(cfg: DictConfig):
                         if strategy == "progressive":
                             wandb.log({"current_k": current_k}, step=global_step)
 
-            if global_step % train_cfg.eval_steps == 0:
+            if global_step % train_cfg.eval_steps == 0 or global_step == num_training_steps:
+                t_eval = time.time()
                 model.eval()
 
                 # validaton on the downstream task; disabled when we use EMA
@@ -479,15 +491,18 @@ def main(cfg: DictConfig):
                     
                     # validation loss logging
                     print(f"Epoch {epoch+1}, Step {global_step}, Validation Loss: {val_loss}")
+                    log_metrics(step=global_step, epoch=epoch+1, val_loss=val_loss, val_acc=val_acc_dict,
+                                train_time_s=t_eval - t_start - eval_time, eval_time_s=time.time() - t_eval)
                     if cfg.wandb.wandb:
                         wandb.log({"val_loss": val_loss}, step=global_step)
 
-                    if is_main and global_step % train_cfg.save_steps == 0 and train_cfg.ema is not None:
+                    is_save_step = global_step % train_cfg.save_steps == 0 or global_step == num_training_steps
+                    if is_main and is_save_step and train_cfg.ema is not None:
                         saved_path = save_ema_snapshot(ckpt_dir, model, ema, cfg, epoch, global_step, val_loss, val_acc_dict)
                         if saved_path is not None:
                             print(f"EMA Model saved to: {saved_path}")
 
-                    if is_main and global_step % train_cfg.save_steps == 0:
+                    if is_main and is_save_step:
                         # save non-EMA snapshot
                         saved_path = save_model_snapshot(
                             ckpt_dir, model, cfg, epoch, global_step,
@@ -497,6 +512,7 @@ def main(cfg: DictConfig):
                         if saved_path is not None:
                             print(f"Model saved to: {saved_path}")
                 
+                eval_time += time.time() - t_eval
                 model.train()
     
     if cfg.wandb.wandb and is_main:
@@ -507,7 +523,7 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args, overrides = parse_args()
     cfg_path = args.cfg
-    cfg = OmegaConf.load(cfg_path)
+    cfg = OmegaConf.merge(OmegaConf.load(cfg_path), OmegaConf.from_dotlist(overrides))
     main(cfg)
