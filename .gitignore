@@ -1,0 +1,7 @@
+# local environment, data caches and experiment outputs
+.venv/
+data/sudoku_new/
+runs/
+ckpts/
+wandb/
+__pycache__/
