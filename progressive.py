@@ -102,9 +102,14 @@ class PhasedMasking:
 
     K is nominal: prompt scaling, target rounding, stochastic interval sampling, and
     confidence collapse can change the number of tokens actually revealed in a step.
+
+    mask_schedule (optional) replaces the K-based stages with a fixed sequence of
+    mask counts out of reference_length target tokens, e.g. [81, 61, 41, 21]. Each
+    count is rescaled to the sequence's L_eff, so every chain visits exactly these
+    states (no interval sampling); K is then unused.
     """
 
-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False):
+    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False):
         if reference_length is None:
             raise ValueError("reference_length must be configured explicitly")
         self.train_loader = train_loader
@@ -117,7 +122,14 @@ class PhasedMasking:
         self.eos_id = eos_id
         self.confidence_threshold = confidence_threshold
         self.prompt_only_reset = prompt_only_reset
+        self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
+        self.random_tie_break = random_tie_break
         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
+        if self.mask_schedule is not None:
+            m = self.mask_schedule
+            assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
+            assert m[0] == reference_length and all(a > b > 0 for a, b in zip(m, m[1:])), \
+                f"mask_schedule must start at reference_length and strictly decrease to > 0, got {m}"
 
         self._configure_stage_partition(K)
 
@@ -146,8 +158,13 @@ class PhasedMasking:
 
     def _configure_stage_partition(self, K: int):
         self.K = K
-        self.num_stages = num_stages_from_token_quota(K, self.reference_length)
-        self.intervals = build_intervals(self.num_stages)
+        if self.mask_schedule is not None:
+            # degenerate intervals [r, r]: the unmasked ratio of stage j is exactly 1 - m_j / reference_length
+            self.num_stages = len(self.mask_schedule)
+            self.intervals = [(1 - m / self.reference_length,) * 2 for m in self.mask_schedule]
+        else:
+            self.num_stages = num_stages_from_token_quota(K, self.reference_length)
+            self.intervals = build_intervals(self.num_stages)
         self.lower = torch.tensor([a for (a,b) in self.intervals], device=self.device, dtype=torch.float)
         self.upper = torch.tensor([b for (a,b) in self.intervals], device=self.device, dtype=torch.float)
     
@@ -282,6 +299,9 @@ class PhasedMasking:
         xt = self.xt
         if k_max > 0:
             score_conf = torch.where(mask_idx , log_probs.max(dim = 2)[0], torch.finfo(log_probs.dtype).min) # [B, L]
+            if self.random_tie_break:
+                # break exact confidence ties uniformly at random instead of by position index
+                score_conf = score_conf + 1e-6 * torch.rand_like(score_conf)
             xt = unmask_from_scores(score_conf, to_reveal, self.x0, self.xt)
 
         if self.mode in ["confidence_collapse"]:
