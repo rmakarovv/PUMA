@@ -1,25 +1,28 @@
-# Sudoku: options A and E
+# Sudoku: options A, E, F and the PUMA reference
 
-Two training conditions from the course proposal ("What Makes Progressive Masking Efficient?",
-Table 1), built on the official PUMA code with minimal changes. Upstream base commit: `2f97f87`.
+Training conditions from the course proposal ("What Makes Progressive Masking Efficient?",
+Table 1), plus stock PUMA as a reference. All are built on the official PUMA code with minimal
+changes. Upstream base commit: `2f97f87`.
 
 | Option | Config | What it is |
 |---|---|---|
 | A, random masking | `yaml_files/sudoku_A_random.yaml` | PUMA's `sudoku_baseline.yaml` (`strategy: standard`). Every update uses a fresh example. The mask count is uniform in 1..L_eff, positions are uniform, and the loss is divided by the number of masked cells. No code change was needed. |
 | E, confidence progression | `yaml_files/sudoku_E_confidence.yaml` | PUMA's progressive pool with a fixed 4-state schedule. Each example is reused for 4 nested states with masked counts (81, 61, 41, 21)/81 of its empty cells. Each transition reveals the highest-confidence masked cells (max_v p) with their true digits. Ties are broken at random, there is no confidence thresholding, and batch slots start at staggered stages. |
+| F, Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | Identical to E except for the reveal rule. Cells are ranked by the ground-truth margin p(x0) − max_{v≠x0} p(v) (Asano et al.), computed from the training forward pass. Because the rule uses the hidden label, it avoids revealing cells the model is confidently wrong about. |
+| P, PUMA reference | `yaml_files/sudoku_PUMA_reference.yaml` | Stock `sudoku_puma.yaml`: K = 10 (8 stages with randomly sampled reveal counts) and confidence fast-forwarding at τ = 0.9. Exact ties are broken by PUMA's default `topk` order. |
 
 L_eff is the number of empty cells. PUMA's single-sequence Sudoku keeps the 20–29 givens visible as
 prompt positions, so L_eff is 52–61. The proposal's counts (81, 61, 41, 21) out of 81 are therefore
 rescaled per puzzle, giving masked fractions of 1.000, 0.753, 0.506 and 0.259. For example, a puzzle
 with L_eff = 57 is trained at 57, 43, 29 and 15 masked cells.
 
-Stock PUMA (`sudoku_puma.yaml`) differs from E in two ways: it uses K = 10 (8 stochastic stages)
-and confidence fast-forwarding at τ = 0.9. That is the proposal's separate "PUMA reference"
-configuration, which has not been run yet.
+P differs from E in its schedule (8 stochastic stages instead of 4 fixed ones) and in
+fast-forwarding cells above τ = 0.9. B, C and D from the proposal are not implemented yet.
 
 ## Code changes vs upstream PUMA
-- `progressive.py`: optional `training.mask_schedule` (fixed per-stage mask counts) and
-  `training.random_tie_break`. Both are off by default, so upstream behaviour is unchanged.
+- `progressive.py`: optional `training.mask_schedule` (fixed per-stage mask counts),
+  `training.random_tie_break`, and `training.reveal_score` (`confidence` or `gt_margin`). The
+  defaults (no schedule, no tie-breaking, `confidence`) keep upstream behaviour unchanged.
 - `train.py`:
   - OmegaConf dotlist overrides on the command line (`training.seed=…`, `training.ckpt_dir=…`).
   - Per-run output directory with `config.yaml` and `metrics.jsonl`. `train_time_s` excludes evaluation time.
@@ -77,6 +80,11 @@ All commands run from the repo root on the cluster.
    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 A:2000 E:2000 A:3000
    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch E:3000 A:4000 E:4000 A:5000 E:5000
    ```
+   Conditions are `A`, `E`, `F` and `P`; the F/P runs used the same commands with `P`/`F` items.
+   ```bash
+   EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch P:1000 F:1000 P:2000 F:2000 P:3000
+   EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch F:3000 P:4000 F:4000 P:5000 F:5000
+   ```
    Each run directory `{A,E}/seed<s>/` contains:
    - `run_info.txt`: Slurm job, node, GPU UUIDs, git state.
    - `code.diff`, the config copy and `config.yaml`.
@@ -87,13 +95,25 @@ The launcher runs a CUDA preflight (a real matmul on each allocated GPU) before 
 changes `CUDA_VISIBLE_DEVICES`. Its `--exclude` list holds nodes that failed CUDA startup or were
 reported as bad; `scripts/cuda_diag.sbatch` is a read-only diagnostic for checking a node.
 
-## Status (2026-10-16)
-Seeds 1000–5000 for A and E were submitted as Slurm jobs 316850 and 316851. Outputs are written to
-`runs/sudoku_AE_20261016/` on the cluster, and `runs/` is not tracked in git.
+## Status (2026-10-17)
+**A and E (done).** All 10 runs finished: jobs 316850 and 316851, outputs in
+`runs/sudoku_AE_20261016/`. The table uses the `top_k_unmasking_1` decoder on 999 test puzzles,
+with mean ± std over 5 seeds. A target counts as reached at the first of two consecutive evals at
+or above it.
+
+| | Final exact-grid acc. | Updates to 50% | Updates to 75% | Updates to 90% |
+|---|---|---|---|---|
+| A | 88.1% ± 1.8 | 7.4k ± 0.5k | 16.0k ± 2.0k | reached by 2/5 seeds (~42k) |
+| E | 95.4% ± 0.6 | 5.6k ± 0.5k | 12.2k ± 1.9k | 22.8k ± 1.6k |
+
+E beat A on every paired seed (+5 to +10 points final accuracy). Both cost about 37 ms per update.
+
+**P and F (running).** Seeds 1000–5000 were submitted on 2026-10-17 as jobs 321634
+(P:1000 F:1000 P:2000 F:2000 P:3000) and 321635 (F:3000 P:4000 F:4000 P:5000 F:5000). Outputs go
+to `runs/sudoku_PF_20261017/`. `runs/` is not tracked in git.
 
 Open items:
-- Summarise the runs: updates and training time to 50/75/90% exact-grid accuracy (two consecutive
-  evals at or above the target), final accuracy, and paired A−E differences.
-- Run the remaining proposal conditions (B, C, D, F) and the PUMA reference configuration.
+- Write a reusable summary script (time to target, final accuracy, paired differences, learning curves).
+- Implement and run B, C and D. If F beats E, also run the top-2 margin (label-free) control.
 - Proposal deviations to resolve: a validation split separate from the test set, removing duplicate
   puzzles across splits, and per-cell accuracy.
