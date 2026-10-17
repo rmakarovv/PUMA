@@ -107,9 +107,13 @@ class PhasedMasking:
     mask counts out of reference_length target tokens, e.g. [81, 61, 41, 21]. Each
     count is rescaled to the sequence's L_eff, so every chain visits exactly these
     states (no interval sampling); K is then unused.
+
+    reveal_score picks which masked tokens a scheduled step reveals: "confidence"
+    (max_v p(v), the default) or "gt_margin" (p(x0) - max_{v != x0} p(v), the
+    ground-truth margin of Asano et al., which uses the clean label).
     """
 
-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False):
+    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence"):
         if reference_length is None:
             raise ValueError("reference_length must be configured explicitly")
         self.train_loader = train_loader
@@ -124,7 +128,9 @@ class PhasedMasking:
         self.prompt_only_reset = prompt_only_reset
         self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
         self.random_tie_break = random_tie_break
+        self.reveal_score = reveal_score
         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
+        assert reveal_score in ["confidence", "gt_margin"], f"invalid reveal_score {reveal_score}"
         if self.mask_schedule is not None:
             m = self.mask_schedule
             assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
@@ -298,7 +304,12 @@ class PhasedMasking:
         k_max = int(to_reveal.max().item())
         xt = self.xt
         if k_max > 0:
-            score_conf = torch.where(mask_idx , log_probs.max(dim = 2)[0], torch.finfo(log_probs.dtype).min) # [B, L]
+            score = log_probs.max(dim = 2)[0] # confidence: max_v log p(v)
+            if self.reveal_score == "gt_margin":
+                probs = log_probs.exp()
+                p_true = probs.gather(2, self.x0.unsqueeze(-1)).squeeze(-1)
+                score = p_true - probs.scatter(2, self.x0.unsqueeze(-1), -1.0).max(dim = 2)[0] # p(x0) - max_{v != x0} p(v)
+            score_conf = torch.where(mask_idx , score, torch.finfo(log_probs.dtype).min) # [B, L]
             if self.random_tie_break:
                 # break exact confidence ties uniformly at random instead of by position index
                 score_conf = score_conf + 1e-6 * torch.rand_like(score_conf)

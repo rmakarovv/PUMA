@@ -360,6 +360,7 @@ def main(cfg: DictConfig):
                 prompt_only_reset=prompt_only_reset,
                 mask_schedule=getattr(train_cfg, "mask_schedule", None),
                 random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
+                reveal_score=getattr(train_cfg, "reveal_score", "confidence"),
             )
         pool = make_pool(current_k)
         next_k_idx = 1
