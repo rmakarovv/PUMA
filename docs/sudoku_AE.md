@@ -108,12 +108,24 @@ or above it.
 
 E beat A on every paired seed (+5 to +10 points final accuracy). Both cost about 37 ms per update.
 
-**P and F (running).** Seeds 1000–5000 were submitted on 2026-10-17 as jobs 321634
-(P:1000 F:1000 P:2000 F:2000 P:3000) and 321635 (F:3000 P:4000 F:4000 P:5000 F:5000). Outputs go
-to `runs/sudoku_PF_20261017/`. `runs/` is not tracked in git.
+**P and F (done).** All 10 runs finished: jobs 321634 (P:1000 F:1000 P:2000 F:2000 P:3000) and
+321635 (F:3000 P:4000 F:4000 P:5000 F:5000), outputs in `runs/sudoku_PF_20261017/`. P is stock PUMA
+with collapse (confidence fast-forwarding at τ = 0.9); E and F run without it.
+
+| | Final exact-grid acc. | Updates to 50% | Updates to 75% | Updates to 90% |
+|---|---|---|---|---|
+| P | 95.4% ± 1.2 | 7.6k ± 2.1k | 13.2k ± 3.4k | 23.4k ± 5.9k |
+| F | 95.7% ± 1.3 | 5.2k ± 0.4k | 11.2k ± 1.6k | 22.6k ± 5.3k |
+
+E, P and F finish within seed noise of each other, about 7–8 points above A on every seed.
+F reaches 50% and 75% slightly sooner than E on every seed, with no consistent difference at 90%.
+
+**Results for analysis.** `results/sudoku/` (tracked in git) has per-eval, per-step and per-run
+CSVs, a summary table, and the raw per-run logs. Regenerate it with
+`python scripts/export_sudoku_results.py`; checkpoints stay in `runs/` on the cluster.
 
 Open items:
-- Write a reusable summary script (time to target, final accuracy, paired differences, learning curves).
+- Learning-curve plots and paired statistical tests (data in `results/sudoku/`).
 - Implement and run B, C and D. If F beats E, also run the top-2 margin (label-free) control.
 - Proposal deviations to resolve: a validation split separate from the test set, removing duplicate
   puzzles across splits, and per-cell accuracy.
