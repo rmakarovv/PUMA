@@ -10,6 +10,7 @@ changes. Upstream base commit: `2f97f87`.
 | E, confidence progression | `yaml_files/sudoku_E_confidence.yaml` | PUMA's progressive pool with a fixed 4-state schedule. Each example is reused for 4 nested states with masked counts (81, 61, 41, 21)/81 of its empty cells. Each transition reveals the highest-confidence masked cells (max_v p) with their true digits. Ties are broken at random, there is no confidence thresholding, and batch slots start at staggered stages. |
 | F, Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | Identical to E except for the reveal rule. Cells are ranked by the ground-truth margin p(x0) − max_{v≠x0} p(v) (Asano et al.), computed from the training forward pass. Because the rule uses the hidden label, it avoids revealing cells the model is confidently wrong about. |
 | P, PUMA reference | `yaml_files/sudoku_PUMA_reference.yaml` | Stock `sudoku_puma.yaml`: K = 10 (8 stages with randomly sampled reveal counts) and confidence fast-forwarding at τ = 0.9. Exact ties are broken by PUMA's default `topk` order. |
+| PN, PUMA without collapse | `yaml_files/sudoku_PUMA_nocollapse.yaml` | Stock PUMA (K = 10, 8 stochastic stages) with confidence fast-forwarding turned off (`mode: standard`). Isolates the effect of collapse relative to P. |
 
 L_eff is the number of empty cells. PUMA's single-sequence Sudoku keeps the 20–29 givens visible as
 prompt positions, so L_eff is 52–61. The proposal's counts (81, 61, 41, 21) out of 81 are therefore
@@ -80,7 +81,7 @@ All commands run from the repo root on the cluster.
    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 A:2000 E:2000 A:3000
    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch E:3000 A:4000 E:4000 A:5000 E:5000
    ```
-   Conditions are `A`, `E`, `F` and `P`; the F/P runs used the same commands with `P`/`F` items.
+   Conditions are `A`, `E`, `F`, `P` and `PN`; the other experiments used the same commands with their own items.
    ```bash
    EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch P:1000 F:1000 P:2000 F:2000 P:3000
    EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch F:3000 P:4000 F:4000 P:5000 F:5000
@@ -119,6 +120,20 @@ with collapse (confidence fast-forwarding at τ = 0.9); E and F run without it.
 
 E, P and F finish within seed noise of each other, about 7–8 points above A on every seed.
 F reaches 50% and 75% slightly sooner than E on every seed, with no consistent difference at 90%.
+
+**PN (done).** Stock PUMA without collapse, seeds 1000–5000: jobs 322829 (PN:1000 PN:2000
+PN:3000) and 322830 (PN:4000 PN:5000), outputs in `runs/sudoku_PN_20261018/`.
+
+| | Final exact-grid acc. | Updates to 50% | Updates to 75% | Updates to 90% |
+|---|---|---|---|---|
+| P (with collapse) | 95.4% ± 1.2 | 7.6k ± 2.1k | 13.2k ± 3.4k | 23.4k ± 5.9k |
+| PN (without collapse) | 93.4% ± 1.6 | 8.4k ± 1.7k | 16.6k ± 2.6k | 33.0k ± 3.9k |
+
+Turning collapse off hurt stock PUMA on every paired seed: −0.5 to −3.2 points final accuracy
+(mean −2.0), and 4k–19k more updates to reach 90%. E also has no collapse but uses 4 fixed
+states instead of 8, and it matches P. So with PUMA's 8-stage schedule, collapse matters.
+One candidate explanation, untested here, is that it shortens each chain, so each update
+draws more fresh puzzles.
 
 **Results for analysis.** `results/sudoku/` (tracked in git) has per-eval, per-step and per-run
 CSVs, a summary table, and the raw per-run logs. Regenerate it with
