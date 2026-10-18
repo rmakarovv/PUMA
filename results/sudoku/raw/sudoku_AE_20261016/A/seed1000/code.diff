@@ -1,0 +1,176 @@
+diff --git a/progressive.py b/progressive.py
+index a872c6b..ec3e285 100644
+--- a/progressive.py
++++ b/progressive.py
+@@ -102,9 +102,14 @@ class PhasedMasking:
+ 
+     K is nominal: prompt scaling, target rounding, stochastic interval sampling, and
+     confidence collapse can change the number of tokens actually revealed in a step.
++
++    mask_schedule (optional) replaces the K-based stages with a fixed sequence of
++    mask counts out of reference_length target tokens, e.g. [81, 61, 41, 21]. Each
++    count is rescaled to the sequence's L_eff, so every chain visits exactly these
++    states (no interval sampling); K is then unused.
+     """
+ 
+-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False):
++    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False):
+         if reference_length is None:
+             raise ValueError("reference_length must be configured explicitly")
+         self.train_loader = train_loader
+@@ -117,7 +122,14 @@ class PhasedMasking:
+         self.eos_id = eos_id
+         self.confidence_threshold = confidence_threshold
+         self.prompt_only_reset = prompt_only_reset
++        self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
++        self.random_tie_break = random_tie_break
+         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
++        if self.mask_schedule is not None:
++            m = self.mask_schedule
++            assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
++            assert m[0] == reference_length and all(a > b > 0 for a, b in zip(m, m[1:])), \
++                f"mask_schedule must start at reference_length and strictly decrease to > 0, got {m}"
+ 
+         self._configure_stage_partition(K)
+ 
+@@ -146,8 +158,13 @@ class PhasedMasking:
+ 
+     def _configure_stage_partition(self, K: int):
+         self.K = K
+-        self.num_stages = num_stages_from_token_quota(K, self.reference_length)
+-        self.intervals = build_intervals(self.num_stages)
++        if self.mask_schedule is not None:
++            # degenerate intervals [r, r]: the unmasked ratio of stage j is exactly 1 - m_j / reference_length
++            self.num_stages = len(self.mask_schedule)
++            self.intervals = [(1 - m / self.reference_length,) * 2 for m in self.mask_schedule]
++        else:
++            self.num_stages = num_stages_from_token_quota(K, self.reference_length)
++            self.intervals = build_intervals(self.num_stages)
+         self.lower = torch.tensor([a for (a,b) in self.intervals], device=self.device, dtype=torch.float)
+         self.upper = torch.tensor([b for (a,b) in self.intervals], device=self.device, dtype=torch.float)
+     
+@@ -282,6 +299,9 @@ class PhasedMasking:
+         xt = self.xt
+         if k_max > 0:
+             score_conf = torch.where(mask_idx , log_probs.max(dim = 2)[0], torch.finfo(log_probs.dtype).min) # [B, L]
++            if self.random_tie_break:
++                # break exact confidence ties uniformly at random instead of by position index
++                score_conf = score_conf + 1e-6 * torch.rand_like(score_conf)
+             xt = unmask_from_scores(score_conf, to_reveal, self.x0, self.xt)
+ 
+         if self.mode in ["confidence_collapse"]:
+diff --git a/train.py b/train.py
+index 0e87e84..b73fc0c 100644
+--- a/train.py
++++ b/train.py
+@@ -26,7 +26,7 @@ from eval.gsm8k_eval import evaluate_ddp_gsm8k
+ def parse_args():
+     parser = argparse.ArgumentParser()
+     parser.add_argument("--cfg", type=str)
+-    return parser.parse_args()
++    return parser.parse_known_args() # extra args are OmegaConf dotlist overrides, e.g. training.seed=1
+ 
+ 
+ def setup_ddp():
+@@ -241,10 +241,15 @@ def main(cfg: DictConfig):
+     torch.cuda.manual_seed(seed)
+ 
+     # ckpt dir
+-    ckpt_dir = f"ckpts/date={datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}"
++    ckpt_dir = getattr(cfg.training, "ckpt_dir", None) or f"ckpts/date={datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+     os.makedirs(ckpt_dir, exist_ok=True)
++    metrics_path = os.path.join(ckpt_dir, "metrics.jsonl")
++    def log_metrics(**kw):
++        with open(metrics_path, "a") as f:
++            f.write(json.dumps(kw) + "\n")
+     if is_main:
+         print(f"Checkpoints will be saved to: {ckpt_dir}")
++        OmegaConf.save(cfg, os.path.join(ckpt_dir, "config.yaml"))
+ 
+     # set device
+     if torch.cuda.is_available():
+@@ -295,7 +300,8 @@ def main(cfg: DictConfig):
+             train_loader.dataset,
+             num_replicas=world_size,
+             rank=rank,
+-            shuffle=True
++            shuffle=True,
++            seed=base_seed, # vary the data order with the training seed (default sampler seed is 0)
+         )
+         train_loader = DataLoader(
+             train_loader.dataset,
+@@ -352,6 +358,8 @@ def main(cfg: DictConfig):
+                 confidence_threshold=train_cfg.confidence_threshold,
+                 eos_id=train_cfg.eos_id,
+                 prompt_only_reset=prompt_only_reset,
++                mask_schedule=getattr(train_cfg, "mask_schedule", None),
++                random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
+             )
+         pool = make_pool(current_k)
+         next_k_idx = 1
+@@ -359,6 +367,7 @@ def main(cfg: DictConfig):
+ 
+     # training loop
+     global_step = 0
++    t_start, eval_time = time.time(), 0.0 # train_time_s = wall time since start minus evaluation time
+ 
+         
+     # wandb initialize
+@@ -434,6 +443,8 @@ def main(cfg: DictConfig):
+ 
+                 if global_step % train_cfg.logging_steps == 0:
+                     print(f"Epoch {epoch+1}, Step {global_step}, Loss {loss.item()}")
++                    log_metrics(step=global_step, epoch=epoch+1, loss=loss.item(), lr=optimizer.param_groups[0]["lr"],
++                                train_time_s=time.time() - t_start - eval_time)
+                     if cfg.wandb.wandb:
+                         wandb.log({"loss": loss.item()}, step=global_step)
+ 
+@@ -443,7 +454,8 @@ def main(cfg: DictConfig):
+                         if strategy == "progressive":
+                             wandb.log({"current_k": current_k}, step=global_step)
+ 
+-            if global_step % train_cfg.eval_steps == 0:
++            if global_step % train_cfg.eval_steps == 0 or global_step == num_training_steps:
++                t_eval = time.time()
+                 model.eval()
+ 
+                 # validaton on the downstream task; disabled when we use EMA
+@@ -479,15 +491,18 @@ def main(cfg: DictConfig):
+                     
+                     # validation loss logging
+                     print(f"Epoch {epoch+1}, Step {global_step}, Validation Loss: {val_loss}")
++                    log_metrics(step=global_step, epoch=epoch+1, val_loss=val_loss, val_acc=val_acc_dict,
++                                train_time_s=t_eval - t_start - eval_time, eval_time_s=time.time() - t_eval)
+                     if cfg.wandb.wandb:
+                         wandb.log({"val_loss": val_loss}, step=global_step)
+ 
+-                    if is_main and global_step % train_cfg.save_steps == 0 and train_cfg.ema is not None:
++                    is_save_step = global_step % train_cfg.save_steps == 0 or global_step == num_training_steps
++                    if is_main and is_save_step and train_cfg.ema is not None:
+                         saved_path = save_ema_snapshot(ckpt_dir, model, ema, cfg, epoch, global_step, val_loss, val_acc_dict)
+                         if saved_path is not None:
+                             print(f"EMA Model saved to: {saved_path}")
+ 
+-                    if is_main and global_step % train_cfg.save_steps == 0:
++                    if is_main and is_save_step:
+                         # save non-EMA snapshot
+                         saved_path = save_model_snapshot(
+                             ckpt_dir, model, cfg, epoch, global_step,
+@@ -497,6 +512,7 @@ def main(cfg: DictConfig):
+                         if saved_path is not None:
+                             print(f"Model saved to: {saved_path}")
+                 
++                eval_time += time.time() - t_eval
+                 model.train()
+     
+     if cfg.wandb.wandb and is_main:
+@@ -507,7 +523,7 @@ def main(cfg: DictConfig):
+ 
+ 
+ if __name__ == "__main__":
+-    args = parse_args()
++    args, overrides = parse_args()
+     cfg_path = args.cfg
+-    cfg = OmegaConf.load(cfg_path)
++    cfg = OmegaConf.merge(OmegaConf.load(cfg_path), OmegaConf.from_dotlist(overrides))
+     main(cfg)
