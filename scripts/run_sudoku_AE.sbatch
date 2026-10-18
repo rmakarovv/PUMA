@@ -2,7 +2,7 @@
 # Runs Sudoku training items sequentially on one 2-GPU allocation (PUMA setup: 2 GPUs x 32).
 # Usage (from the repo root, after mkdir -p runs/logs):
 #   EXP_DIR=runs/<exp> sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 ...
-# Each item is COND:SEED with COND in {A, E, F, P} (P = stock PUMA reference); finished items (DONE file) are skipped.
+# Each item is COND:SEED with COND in {A, E, F, P, PN} (P = stock PUMA, PN = PUMA without collapse); DONE items are skipped.
 #SBATCH --job-name=puma_sudoku_AE
 #SBATCH --partition=cscc-gpu-p
 #SBATCH --qos=cscc-gpu-qos
@@ -47,6 +47,7 @@ for item in "$@"; do
         E) cfg=yaml_files/sudoku_E_confidence.yaml ;;
         F) cfg=yaml_files/sudoku_F_gtmargin.yaml ;;
         P) cfg=yaml_files/sudoku_PUMA_reference.yaml ;;
+        PN) cfg=yaml_files/sudoku_PUMA_nocollapse.yaml ;;
         *) echo "unknown condition in $item"; status=1; continue ;;
     esac
     out=$EXP_DIR/$cond/seed$seed
