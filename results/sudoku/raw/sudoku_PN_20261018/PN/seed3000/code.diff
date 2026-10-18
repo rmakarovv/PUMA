@@ -1,0 +1,76 @@
+diff --git a/docs/sudoku_AE.md b/docs/sudoku_AE.md
+index 0420259..8fc3deb 100644
+--- a/docs/sudoku_AE.md
++++ b/docs/sudoku_AE.md
+@@ -10,6 +10,7 @@ changes. Upstream base commit: `2f97f87`.
+ | E, confidence progression | `yaml_files/sudoku_E_confidence.yaml` | PUMA's progressive pool with a fixed 4-state schedule. Each example is reused for 4 nested states with masked counts (81, 61, 41, 21)/81 of its empty cells. Each transition reveals the highest-confidence masked cells (max_v p) with their true digits. Ties are broken at random, there is no confidence thresholding, and batch slots start at staggered stages. |
+ | F, Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | Identical to E except for the reveal rule. Cells are ranked by the ground-truth margin p(x0) − max_{v≠x0} p(v) (Asano et al.), computed from the training forward pass. Because the rule uses the hidden label, it avoids revealing cells the model is confidently wrong about. |
+ | P, PUMA reference | `yaml_files/sudoku_PUMA_reference.yaml` | Stock `sudoku_puma.yaml`: K = 10 (8 stages with randomly sampled reveal counts) and confidence fast-forwarding at τ = 0.9. Exact ties are broken by PUMA's default `topk` order. |
++| PN, PUMA without collapse | `yaml_files/sudoku_PUMA_nocollapse.yaml` | Stock PUMA (K = 10, 8 stochastic stages) with confidence fast-forwarding turned off (`mode: standard`). Isolates the effect of collapse relative to P. |
+ 
+ L_eff is the number of empty cells. PUMA's single-sequence Sudoku keeps the 20–29 givens visible as
+ prompt positions, so L_eff is 52–61. The proposal's counts (81, 61, 41, 21) out of 81 are therefore
+@@ -80,7 +81,7 @@ All commands run from the repo root on the cluster.
+    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 A:2000 E:2000 A:3000
+    EXP_DIR=runs/sudoku_AE sbatch scripts/run_sudoku_AE.sbatch E:3000 A:4000 E:4000 A:5000 E:5000
+    ```
+-   Conditions are `A`, `E`, `F` and `P`; the F/P runs used the same commands with `P`/`F` items.
++   Conditions are `A`, `E`, `F`, `P` and `PN`; the other experiments used the same commands with their own items.
+    ```bash
+    EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch P:1000 F:1000 P:2000 F:2000 P:3000
+    EXP_DIR=runs/sudoku_PF sbatch scripts/run_sudoku_AE.sbatch F:3000 P:4000 F:4000 P:5000 F:5000
+@@ -120,6 +121,9 @@ with collapse (confidence fast-forwarding at τ = 0.9); E and F run without it.
+ E, P and F finish within seed noise of each other, about 7–8 points above A on every seed.
+ F reaches 50% and 75% slightly sooner than E on every seed, with no consistent difference at 90%.
+ 
++**PN (running).** Stock PUMA without collapse, seeds 1000–5000: jobs 322829 (PN:1000 PN:2000
++PN:3000) and 322830 (PN:4000 PN:5000), outputs in `runs/sudoku_PN_20261018/`.
++
+ **Results for analysis.** `results/sudoku/` (tracked in git) has per-eval, per-step and per-run
+ CSVs, a summary table, and the raw per-run logs. Regenerate it with
+ `python scripts/export_sudoku_results.py`; checkpoints stay in `runs/` on the cluster.
+diff --git a/results/sudoku/README.md b/results/sudoku/README.md
+index f78934c..72b9ea2 100644
+--- a/results/sudoku/README.md
++++ b/results/sudoku/README.md
+@@ -15,6 +15,7 @@ python scripts/export_sudoku_results.py            # all runs/sudoku_* experimen
+ | E | confidence progression | `yaml_files/sudoku_E_confidence.yaml` | no (`mode: standard`) |
+ | F | Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | no (`mode: standard`) |
+ | P | PUMA reference (stock) | `yaml_files/sudoku_PUMA_reference.yaml` | yes (`mode: confidence_collapse`, τ = 0.9, K = 10) |
++| PN | PUMA without collapse | `yaml_files/sudoku_PUMA_nocollapse.yaml` | no (`mode: standard`, K = 10) |
+ 
+ All runs use seeds 1000–5000 and 53,570 updates (batch 32 × 2 GPUs). Runs with the same seed
+ start from identical weights.
+diff --git a/scripts/export_sudoku_results.py b/scripts/export_sudoku_results.py
+index 5a2e76f..f6beb09 100644
+--- a/scripts/export_sudoku_results.py
++++ b/scripts/export_sudoku_results.py
+@@ -23,6 +23,7 @@ CONDITION_NAMES = {
+     "E": "confidence progression",
+     "F": "Gt-Margin progression",
+     "P": "PUMA reference",
++    "PN": "PUMA without collapse",
+ }
+ TARGETS = (0.5, 0.75, 0.9)
+ RAW_FILES = ("metrics.jsonl", "run_info.txt", "config.yaml", "code.diff")
+diff --git a/scripts/run_sudoku_AE.sbatch b/scripts/run_sudoku_AE.sbatch
+index 749fc07..cc85314 100644
+--- a/scripts/run_sudoku_AE.sbatch
++++ b/scripts/run_sudoku_AE.sbatch
+@@ -2,7 +2,7 @@
+ # Runs Sudoku training items sequentially on one 2-GPU allocation (PUMA setup: 2 GPUs x 32).
+ # Usage (from the repo root, after mkdir -p runs/logs):
+ #   EXP_DIR=runs/<exp> sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 ...
+-# Each item is COND:SEED with COND in {A, E, F, P} (P = stock PUMA reference); finished items (DONE file) are skipped.
++# Each item is COND:SEED with COND in {A, E, F, P, PN} (P = stock PUMA, PN = PUMA without collapse); DONE items are skipped.
+ #SBATCH --job-name=puma_sudoku_AE
+ #SBATCH --partition=cscc-gpu-p
+ #SBATCH --qos=cscc-gpu-qos
+@@ -47,6 +47,7 @@ for item in "$@"; do
+         E) cfg=yaml_files/sudoku_E_confidence.yaml ;;
+         F) cfg=yaml_files/sudoku_F_gtmargin.yaml ;;
+         P) cfg=yaml_files/sudoku_PUMA_reference.yaml ;;
++        PN) cfg=yaml_files/sudoku_PUMA_nocollapse.yaml ;;
+         *) echo "unknown condition in $item"; status=1; continue ;;
+     esac
+     out=$EXP_DIR/$cond/seed$seed

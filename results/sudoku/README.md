@@ -15,6 +15,7 @@ python scripts/export_sudoku_results.py            # all runs/sudoku_* experimen
 | E | confidence progression | `yaml_files/sudoku_E_confidence.yaml` | no (`mode: standard`) |
 | F | Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | no (`mode: standard`) |
 | P | PUMA reference (stock) | `yaml_files/sudoku_PUMA_reference.yaml` | yes (`mode: confidence_collapse`, τ = 0.9, K = 10) |
+| PN | PUMA without collapse | `yaml_files/sudoku_PUMA_nocollapse.yaml` | no (`mode: standard`, K = 10) |
 
 All runs use seeds 1000–5000 and 53,570 updates (batch 32 × 2 GPUs). Runs with the same seed
 start from identical weights.

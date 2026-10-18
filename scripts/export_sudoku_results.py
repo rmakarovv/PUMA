@@ -23,6 +23,7 @@ CONDITION_NAMES = {
     "E": "confidence progression",
     "F": "Gt-Margin progression",
     "P": "PUMA reference",
+    "PN": "PUMA without collapse",
 }
 TARGETS = (0.5, 0.75, 0.9)
 RAW_FILES = ("metrics.jsonl", "run_info.txt", "config.yaml", "code.diff")
