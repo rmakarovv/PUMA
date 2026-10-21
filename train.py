@@ -361,6 +361,7 @@ def main(cfg: DictConfig):
                 mask_schedule=getattr(train_cfg, "mask_schedule", None),
                 random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
                 reveal_score=getattr(train_cfg, "reveal_score", "confidence"),
+                reuse_examples=bool(getattr(train_cfg, "reuse_examples", True)),
             )
         pool = make_pool(current_k)
         next_k_idx = 1
