@@ -1,0 +1,4 @@
+sudoku_B_20261019/seed2000/ema_step=53570.pt       fp32  exact=0.500 n_err=150 | first err: left=1 conf_fp32_median=0.5492 frac_conf>0.998=0.11 max_row_masked=2.07 (random mask 1.82)
+sudoku_B_20261019/seed2000/ema_step=53570.pt       first exact=0.047 n_err=286 | first err: left=5 conf_fp32_median=0.9483 frac_conf>0.998=0.34 max_row_masked=3.81 (random mask 2.34)
+sudoku_B_20261019/seed2000/ema_step=53570.pt       last  exact=0.707 n_err=88 | first err: left=4 conf_fp32_median=0.8822 frac_conf>0.998=0.32 max_row_masked=3.91 (random mask 3.14)
+sudoku_B_20261019/seed2000/ema_step=53570.pt       rnd   exact=0.607 n_err=118 | first err: left=1 conf_fp32_median=0.5360 frac_conf>0.998=0.08 max_row_masked=2.06 (random mask 1.92)

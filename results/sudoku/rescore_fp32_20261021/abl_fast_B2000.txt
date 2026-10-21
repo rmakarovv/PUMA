@@ -1,0 +1,3 @@
+sudoku_B_20261019/seed2000/ema_step=53570.pt  fp32       exact=0.500 tied_step_frac=0.08
+sudoku_B_20261019/seed2000/ema_step=53570.pt  rank16     exact=0.047 tied_step_frac=0.84
+sudoku_B_20261019/seed2000/ema_step=53570.pt  rank16_rnd exact=0.583 tied_step_frac=0.92

@@ -1,0 +1,14 @@
+condition=B seed=4000 config=yaml_files/sudoku_B_schedule.yaml
+slurm_job=325796 node=gpu-06 start=2026-10-19T17:49:34+04:00
+CUDA_VISIBLE_DEVICES=0,1
+0, GPU-1b1cc121-23d2-8948-6a6b-e493c6184490, NVIDIA A100-SXM4-40GB
+1, GPU-78d70ce0-1ac2-7d5f-3294-b79a1a63587f, NVIDIA A100-SXM4-40GB
+2, GPU-70399f25-9aa2-5c66-2bd0-5744dd989a19, NVIDIA A100-SXM4-40GB
+3, GPU-ea9730e2-7c91-fbdf-7280-ae923721b76d, NVIDIA A100-SXM4-40GB
+git_head=fe967e2bbb613ed5a1aab903e7c5e111d159b0a6
+ M progressive.py
+ M train.py
+?? data/sudoku_new
+?? scripts/run_sudoku_B.sbatch
+?? yaml_files/sudoku_B_schedule.yaml
+end=2026-10-19T19:24:28+04:00 exit=0

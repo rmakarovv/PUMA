@@ -1,0 +1,2 @@
+sudoku_D_20261019/seed1000/ema_step=53570.pt  fwd16      exact=0.850 tied_step_frac=0.08
+sudoku_D_20261019/seed1000/ema_step=53570.pt  bf16       exact=0.353 tied_step_frac=0.88

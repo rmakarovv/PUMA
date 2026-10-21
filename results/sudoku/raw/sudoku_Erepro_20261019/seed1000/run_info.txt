@@ -1,0 +1,7 @@
+condition=E(repro) seed=1000 config=yaml_files/sudoku_E_confidence.yaml slurm_job=326388 node=gpu-06 start=2026-10-19T20:58:47+04:00
+git_head=fe967e2bbb613ed5a1aab903e7c5e111d159b0a6
+ M progressive.py
+?? data/sudoku_new
+?? scripts/run_sudoku_D.sbatch
+?? yaml_files/sudoku_D_random.yaml
+end=2026-10-19T22:34:25+04:00 exit=0

@@ -1,0 +1,3 @@
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  fp32       exact=0.953 tied_step_frac=0.15
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  rank16     exact=0.943 tied_step_frac=0.95
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  rank16_rnd exact=0.957 tied_step_frac=0.95

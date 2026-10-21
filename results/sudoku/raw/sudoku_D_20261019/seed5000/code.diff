@@ -1,0 +1,34 @@
+diff --git a/progressive.py b/progressive.py
+index db82080..b71eb8e 100644
+--- a/progressive.py
++++ b/progressive.py
+@@ -109,8 +109,9 @@ class PhasedMasking:
+     states (no interval sampling); K is then unused.
+ 
+     reveal_score picks which masked tokens a scheduled step reveals: "confidence"
+-    (max_v p(v), the default) or "gt_margin" (p(x0) - max_{v != x0} p(v), the
+-    ground-truth margin of Asano et al., which uses the clean label).
++    (max_v p(v), the default), "gt_margin" (p(x0) - max_{v != x0} p(v), the
++    ground-truth margin of Asano et al., which uses the clean label) or "random"
++    (uniform over the remaining masked tokens, ignoring the model).
+     """
+ 
+     def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence"):
+@@ -130,7 +131,7 @@ class PhasedMasking:
+         self.random_tie_break = random_tie_break
+         self.reveal_score = reveal_score
+         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
+-        assert reveal_score in ["confidence", "gt_margin"], f"invalid reveal_score {reveal_score}"
++        assert reveal_score in ["confidence", "gt_margin", "random"], f"invalid reveal_score {reveal_score}"
+         if self.mask_schedule is not None:
+             m = self.mask_schedule
+             assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
+@@ -309,6 +310,8 @@ class PhasedMasking:
+                 probs = log_probs.exp()
+                 p_true = probs.gather(2, self.x0.unsqueeze(-1)).squeeze(-1)
+                 score = p_true - probs.scatter(2, self.x0.unsqueeze(-1), -1.0).max(dim = 2)[0] # p(x0) - max_{v != x0} p(v)
++            elif self.reveal_score == "random":
++                score = torch.rand_like(score)
+             score_conf = torch.where(mask_idx , score, torch.finfo(log_probs.dtype).min) # [B, L]
+             if self.random_tie_break:
+                 # break exact confidence ties uniformly at random instead of by position index

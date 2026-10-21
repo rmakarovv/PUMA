@@ -1,0 +1,2 @@
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  fwd16      exact=0.953 tied_step_frac=0.14
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  bf16       exact=0.943 tied_step_frac=0.95

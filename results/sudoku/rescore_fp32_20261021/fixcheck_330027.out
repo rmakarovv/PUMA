@@ -1,0 +1,14 @@
+job=330027 node=gpu-08 git_head=fe967e2bbb613ed5a1aab903e7c5e111d159b0a6
+cuda topk tie -> [5] (lowest tied index is 5)
+bf16 of [0.9990, 0.9995, 0.9999] -> [1.0, 1.0, 1.0]
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_Erepro_20261019/seed1000/ema_step=53570.pt", "step": 53570, "bf16": 0.9499, "fix": 0.956, "fp32": 0.958}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed1000/ema_step=53570.pt", "step": 53570, "bf16": 0.8488, "fix": 0.8889, "fp32": 0.8949}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed2000/ema_step=53570.pt", "step": 53570, "bf16": 0.0531, "fix": 0.5145, "fp32": 0.5105}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed3000/ema_step=53570.pt", "step": 53570, "bf16": 0.9079, "fix": 0.9389, "fp32": 0.9369}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed4000/ema_step=53570.pt", "step": 53570, "bf16": 0.8669, "fix": 0.8959, "fp32": 0.8899}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed5000/ema_step=53570.pt", "step": 53570, "bf16": 0.4314, "fix": 0.7357, "fp32": 0.7377}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed1000/ema_step=53570.pt", "step": 53570, "bf16": 0.3504, "fix": 0.8328, "fp32": 0.8208}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed2000/ema_step=53570.pt", "step": 53570, "bf16": 0.018, "fix": 0.4615, "fp32": 0.4585}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed3000/ema_step=53570.pt", "step": 53570, "bf16": 0.9349, "fix": 0.9269, "fp32": 0.9289}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed4000/ema_step=53570.pt", "step": 53570, "bf16": 0.5325, "fix": 0.6897, "fp32": 0.6977}
+{"ckpt": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed5000/ema_step=53570.pt", "step": 53570, "bf16": 0.8599, "fix": 0.7958, "fp32": 0.8008}

@@ -1,0 +1,4 @@
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  fp32  exact=0.953 n_err=14 | first err: left=39 conf_fp32_median=0.9238 frac_conf>0.998=0.00 max_row_masked=6.57 (random mask 5.79)
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  first exact=0.943 n_err=17 | first err: left=42 conf_fp32_median=0.9503 frac_conf>0.998=0.24 max_row_masked=7.06 (random mask 6.88)
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  last  exact=0.943 n_err=17 | first err: left=38 conf_fp32_median=0.9462 frac_conf>0.998=0.12 max_row_masked=6.65 (random mask 5.94)
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt  rnd   exact=0.957 n_err=13 | first err: left=40 conf_fp32_median=0.9395 frac_conf>0.998=0.00 max_row_masked=7.00 (random mask 6.31)

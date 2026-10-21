@@ -1,0 +1,67 @@
+model:
+  vocab_size: 11
+  hidden_size: 256
+  intermediate_size: 768
+  num_layers: 8
+  num_attention_heads: 8
+  num_kv_heads: 8
+  max_position: 81
+  rms_norm_eps: 1.0e-06
+  dropout: 0.0
+training:
+  strategy: progressive
+  diffusion_layout: full
+  prompt_only_reset: true
+  confidence_threshold: null
+  mode: standard
+  mask_schedule:
+  - 81
+  - 61
+  - 41
+  - 21
+  K: 20
+  reference_length: 81
+  random_tie_break: true
+  reveal_score: random
+  data_ratio: 1.0
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  num_epochs: 2
+  max_grad_norm: 1.0
+  batch_size: 32
+  warmup_steps: 1000
+  logging_steps: 100
+  eval_steps: 1000
+  save_steps: 10000
+  ema: 0.9999
+  eos_id: null
+  seed: 1000
+  ckpt_dir: /home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed1000
+validation:
+  val_dir: data/sudoku_new
+  ratio: 0.01
+  sampling:
+    temperature: 0.0
+    confidence:
+    - top_k
+    - top_k_margin
+    unmasking_num:
+    - 1
+    - 2
+    - 3
+data:
+  mask_id: 10
+  dataset: sudoku
+  data_dir: data/sudoku_new
+  sudoku_type: new
+  val_ratio: 0.05
+  seed: 2026
+  mmap: false
+  training:
+    per_gpu_batch_size: ${training.batch_size}
+    cpus: 4
+wandb:
+  wandb: false
+  project: mdm-pretraining
+  name: sudoku-D-random
+  entity: your-entity-here

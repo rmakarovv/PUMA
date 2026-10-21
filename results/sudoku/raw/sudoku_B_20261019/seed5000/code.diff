@@ -1,0 +1,65 @@
+diff --git a/progressive.py b/progressive.py
+index db82080..1dfd8d7 100644
+--- a/progressive.py
++++ b/progressive.py
+@@ -111,9 +111,14 @@ class PhasedMasking:
+     reveal_score picks which masked tokens a scheduled step reveals: "confidence"
+     (max_v p(v), the default) or "gt_margin" (p(x0) - max_{v != x0} p(v), the
+     ground-truth margin of Asano et al., which uses the clean label).
++
++    reuse_examples=False (requires mask_schedule) gives the schedule-only control: every
++    update draws a fresh example for each batch slot and masks a uniformly random subset
++    of the stage's mask count. Slots keep their staggered stage and advance one stage per
++    update, so the mask counts match the reuse conditions, but nothing is reused or nested.
+     """
+ 
+-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence"):
++    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence", reuse_examples: bool = True):
+         if reference_length is None:
+             raise ValueError("reference_length must be configured explicitly")
+         self.train_loader = train_loader
+@@ -129,6 +134,7 @@ class PhasedMasking:
+         self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
+         self.random_tie_break = random_tie_break
+         self.reveal_score = reveal_score
++        self.reuse_examples = reuse_examples
+         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
+         assert reveal_score in ["confidence", "gt_margin"], f"invalid reveal_score {reveal_score}"
+         if self.mask_schedule is not None:
+@@ -136,6 +142,7 @@ class PhasedMasking:
+             assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
+             assert m[0] == reference_length and all(a > b > 0 for a, b in zip(m, m[1:])), \
+                 f"mask_schedule must start at reference_length and strictly decrease to > 0, got {m}"
++        assert reuse_examples or self.mask_schedule is not None, "reuse_examples=False needs a mask_schedule"
+ 
+         self._configure_stage_partition(K)
+ 
+@@ -285,6 +292,16 @@ class PhasedMasking:
+         B, L, V = log_probs.shape
+         device = self.device
+ 
++        if not self.reuse_examples:
++            # schedule-only control: fresh example and independent random mask for every slot
++            next_stage = (self.state['stage'] + 1) % self.num_stages
++            self.x0, self.xt, new_masks, new_L_eff = self._refill_pool(B, next_stage)
++            self.state['prompt_mask'] = new_masks
++            self.state['L_eff'] = new_L_eff
++            self.state['stage'] = next_stage
++            self.state['t'] += 1
++            return
++
+         # stage indices for the current update
+         next_stage = (self.state['stage'] + 1) % self.num_stages
+         replace_on_wrap = (next_stage == 0)
+diff --git a/train.py b/train.py
+index 9d5c5f3..4cf495d 100644
+--- a/train.py
++++ b/train.py
+@@ -361,6 +361,7 @@ def main(cfg: DictConfig):
+                 mask_schedule=getattr(train_cfg, "mask_schedule", None),
+                 random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
+                 reveal_score=getattr(train_cfg, "reveal_score", "confidence"),
++                reuse_examples=bool(getattr(train_cfg, "reuse_examples", True)),
+             )
+         pool = make_pool(current_k)
+         next_k_idx = 1
