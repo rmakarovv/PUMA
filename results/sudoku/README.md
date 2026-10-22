@@ -42,6 +42,11 @@ on the 5% held-out training split, computed with non-EMA weights.
   - Targets: `updates_to_{50,75,90}` and `train_min_to_{50,75,90}`, using the primary decoder.
     A target counts as reached at the first of two consecutive evals at or above it; the cell is
     empty if the run never reached it.
+- `reeval.csv`: re-scores of the saved EMA checkpoints (every 10k updates and the final step) by
+  `scripts/reeval_sudoku.py`, one row per checkpoint, precision and decoder. `precision` is `fp32` (fp32
+  decode) or `bf16` (the original eval, final checkpoints only). `logged_bf16_acc` is the value logged
+  during training. The bf16 eval ranks cells by bf16 confidences, so near-1 values tie and are filled in
+  grid order. Raw outputs and job records are in `raw/reeval_*`.
 - `raw/<experiment>/<condition>/seed<seed>/`: the original `metrics.jsonl`, `run_info.txt`,
   `config.yaml` (resolved config) and `code.diff`. `code.diff` holds uncommitted changes relative
   to `git_head` at launch, and is empty when the tree was clean.

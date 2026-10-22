@@ -5,8 +5,10 @@ code.diff) and writes to --out:
   evals.csv      one row per evaluation (accuracy of every decoder, val loss, timing)
   train_log.csv  one row per logged training step (loss, lr, train time)
   runs.csv       one row per run (provenance, final metrics, updates/time to accuracy targets)
-  summary.md     mean ± std per condition
+  reeval.csv     re-scores of saved EMA checkpoints by scripts/reeval_sudoku.py (runs/reeval_*)
+  summary.md     mean ± std per condition (training-time eval, plus the re-score table if any)
   raw/<exp>/<COND>/seed<S>/  copies of the small per-run records (no checkpoints)
+  raw/<reeval>/  re-evaluation outputs and job records
 Usage: python scripts/export_sudoku_results.py [--out results/sudoku] [runs/sudoku_* ...]
 """
 import argparse
@@ -62,6 +64,7 @@ def main():
     ap.add_argument("exp_dirs", nargs="*", help="experiment directories (default: runs/sudoku_*)")
     ap.add_argument("--out", default="results/sudoku")
     ap.add_argument("--decoder", default="top_k_unmasking_1", help="primary decoder for targets and summary")
+    ap.add_argument("--reeval-dirs", nargs="*", default=None, help="re-evaluation directories (default: runs/reeval_*)")
     args = ap.parse_args()
     exp_dirs = args.exp_dirs or sorted(glob.glob("runs/sudoku_*"))
     os.makedirs(args.out, exist_ok=True)
@@ -152,8 +155,51 @@ def main():
             cells.append(mean_std([h / 1000 for h in hits], lambda x: f"{x:.1f}k") if len(hits) == len(rs)
                          else f"reached by {len(hits)}/{len(rs)}")
         lines.append("| " + " | ".join(cells) + " |")
+
+    # re-scores of saved EMA checkpoints by scripts/reeval_sudoku.py (one directory per re-evaluation)
+    reeval_rows = []
+    for reeval_dir in args.reeval_dirs if args.reeval_dirs is not None else sorted(glob.glob("runs/reeval_*")):
+        name = os.path.basename(os.path.normpath(reeval_dir))
+        for path in sorted(glob.glob(os.path.join(reeval_dir, "shard*.jsonl"))):
+            for line in open(path):
+                r = json.loads(line)
+                reeval_rows.append({"reeval": name, "experiment": r["experiment"], "condition": r["condition"],
+                                    "condition_name": CONDITION_NAMES.get(r["condition"], ""), "seed": r["seed"],
+                                    "step": r["step"], "final": int(r["final"]), "precision": r["precision"],
+                                    "decoder": r["decoder"], "acc": r["acc"], "logged_bf16_acc": r["logged_bf16_acc"],
+                                    "eval_time_s": r["eval_time_s"], "node": r["node"], "gpu": r["gpu"]})
+        raw_dir = os.path.join(args.out, "raw", name)
+        os.makedirs(raw_dir, exist_ok=True)
+        for path in glob.glob(os.path.join(reeval_dir, "*.jsonl")) + glob.glob(os.path.join(reeval_dir, "run_info_job*.txt")) \
+                + glob.glob(os.path.join(reeval_dir, "code_job*.diff")):
+            shutil.copy2(path, raw_dir)
+    if reeval_rows:
+        reeval_rows.sort(key=lambda r: (r["reeval"], r["condition"], r["seed"], r["step"], r["precision"], r["decoder"]))
+        write_csv("reeval.csv", reeval_rows)
+        prim = [r for r in reeval_rows if r["decoder"] == args.decoder]
+        repro = [abs(r["acc"] - r["logged_bf16_acc"]) for r in prim if r["precision"] == "bf16"]
+        steps = sorted({r["step"] for r in prim if not r["final"]})
+        lines += ["", "## fp32 re-score of saved EMA checkpoints",
+                  "",
+                  f"From `reeval.csv` (`scripts/reeval_sudoku.py`): the same eval with an fp32 decode. The bf16 eval used "
+                  f"during training ranks cells by bf16 confidences, so near-1 confidences tie and are broken by position. "
+                  f"bf16 re-runs reproduce the logged accuracy within {100 * max(repro):.2f} points "
+                  f"({len(repro)} checkpoints)." if repro else "",
+                  "",
+                  "| Condition | Final acc. fp32 (%) | Final acc. bf16 as logged (%) | " + " | ".join(f"fp32 at {s // 1000}k" for s in steps) + " |",
+                  "|---|---|---|" + "---|" * len(steps)]
+        for cond in sorted({r["condition"] for r in prim}):
+            fin = [r for r in prim if r["condition"] == cond and r["final"] and r["precision"] == "fp32"]
+            cells = [f"{cond} ({CONDITION_NAMES.get(cond, '')})",
+                     mean_std([100 * r["acc"] for r in fin], lambda x: f"{x:.1f}"),
+                     mean_std([100 * r["logged_bf16_acc"] for r in fin], lambda x: f"{x:.1f}")]
+            for s in steps:
+                cells.append(mean_std([100 * r["acc"] for r in prim if r["condition"] == cond and r["step"] == s
+                                       and r["precision"] == "fp32"], lambda x: f"{x:.1f}"))
+            lines.append("| " + " | ".join(cells) + " |")
     open(os.path.join(args.out, "summary.md"), "w").write("\n".join(lines) + "\n")
-    print(f"wrote {len(eval_rows)} eval rows, {len(train_rows)} train rows, {len(run_rows)} runs to {args.out}")
+    print(f"wrote {len(eval_rows)} eval rows, {len(train_rows)} train rows, {len(run_rows)} runs, "
+          f"{len(reeval_rows)} re-eval rows to {args.out}")
 
 
 if __name__ == "__main__":

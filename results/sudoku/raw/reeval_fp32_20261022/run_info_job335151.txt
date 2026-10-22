@@ -1,0 +1,13 @@
+slurm_job=335151 node=gpu-03 start=2026-10-22T21:32:09+04:00 shards=0,1/4 args=--bf16-final
+CUDA_VISIBLE_DEVICES=0,1
+0, GPU-4dcdb079-8b54-b7ca-58be-80653934acd6, NVIDIA A100-SXM4-40GB, 0 MiB
+1, GPU-497f5ac1-3ffc-4ec6-e373-fdfd268f194d, NVIDIA A100-SXM4-40GB, 0 MiB
+2, GPU-4d598231-78bf-2adb-885e-07a9007cf3af, NVIDIA A100-SXM4-40GB, 29693 MiB
+3, GPU-fe94d827-f8bd-4cf7-81ec-36f413e01fb1, NVIDIA A100-SXM4-40GB, 38945 MiB
+GPU-4d598231-78bf-2adb-885e-07a9007cf3af, 1367553, 29684 MiB
+GPU-fe94d827-f8bd-4cf7-81ec-36f413e01fb1, 1465353, 38936 MiB
+git_head=fe967e2bbb613ed5a1aab903e7c5e111d159b0a6
+ M sampling.py
+?? scripts/reeval_sudoku.py
+?? scripts/reeval_sudoku.sbatch
+end=2026-10-22T22:43:17+04:00 exit=0

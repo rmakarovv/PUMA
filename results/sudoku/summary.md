@@ -11,3 +11,15 @@ A target counts as reached at the first of two consecutive evals at or above it.
 | F (Gt-Margin progression) | 5 | 95.7 ± 1.3 | 96.3 ± 1.0 | 0.0781 ± 0.0080 | 33.5 ± 0.4 | 5.2k ± 0.4k | 11.2k ± 1.6k | 22.6k ± 5.3k |
 | P (PUMA reference) | 5 | 95.4 ± 1.2 | 95.7 ± 1.4 | 0.0764 ± 0.0143 | 33.8 ± 0.5 | 7.6k ± 2.1k | 13.2k ± 3.4k | 23.4k ± 5.9k |
 | PN (PUMA without collapse) | 5 | 93.4 ± 1.6 | 93.7 ± 1.6 | 0.0887 ± 0.0113 | 33.0 ± 0.1 | 8.4k ± 1.7k | 16.6k ± 2.6k | 33.0k ± 3.9k |
+
+## fp32 re-score of saved EMA checkpoints
+
+From `reeval.csv` (`scripts/reeval_sudoku.py`): the same eval with an fp32 decode. The bf16 eval used during training ranks cells by bf16 confidences, so near-1 confidences tie and are broken by position. bf16 re-runs reproduce the logged accuracy within 0.10 points (25 checkpoints).
+
+| Condition | Final acc. fp32 (%) | Final acc. bf16 as logged (%) | fp32 at 10k | fp32 at 20k | fp32 at 30k | fp32 at 40k | fp32 at 50k |
+|---|---|---|---|---|---|---|---|
+| A (random masking) | 90.7 ± 1.5 | 88.1 ± 1.8 | 63.3 ± 3.3 | 79.5 ± 2.7 | 86.6 ± 2.0 | 89.8 ± 1.3 | 90.6 ± 1.3 |
+| E (confidence progression) | 96.2 ± 0.7 | 95.4 ± 0.6 | 72.3 ± 3.0 | 88.3 ± 1.8 | 93.8 ± 1.1 | 95.6 ± 0.5 | 96.3 ± 0.4 |
+| F (Gt-Margin progression) | 96.2 ± 1.3 | 95.7 ± 1.3 | 73.5 ± 4.5 | 88.9 ± 3.3 | 93.8 ± 2.2 | 95.6 ± 1.7 | 96.0 ± 1.3 |
+| P (PUMA reference) | 95.7 ± 1.6 | 95.4 ± 1.2 | 66.0 ± 10.2 | 88.2 ± 5.5 | 93.0 ± 2.8 | 95.3 ± 1.6 | 95.6 ± 1.6 |
+| PN (PUMA without collapse) | 93.9 ± 1.7 | 93.4 ± 1.6 | 58.8 ± 7.6 | 81.1 ± 2.8 | 89.2 ± 1.8 | 92.9 ± 1.5 | 93.7 ± 1.6 |
