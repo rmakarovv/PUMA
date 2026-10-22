@@ -1,0 +1,9 @@
+condition=A seed=3000 config=yaml_files/sudoku_A_random.yaml extra=
+slurm_job=316850 node=gpu-55 start=2026-10-16T19:20:48+04:00
+CUDA_VISIBLE_DEVICES=1,3
+0, GPU-3b4522a4-35f5-4297-8a61-30dba3a0a3cb, NVIDIA A100-SXM4-40GB
+1, GPU-563ee57c-e464-4d17-a1d0-e7b98c2a3a00, NVIDIA A100-SXM4-40GB
+2, GPU-1f92eec1-106d-eddc-3579-1e7c697452d5, NVIDIA A100-SXM4-40GB
+3, GPU-12c1d32c-36ff-f0e0-882e-9ebf9e41b5b7, NVIDIA A100-SXM4-40GB
+git_head=fe0f864d0f7687af679f15e8f9ffd4e5e1cda363
+end=2026-10-16T20:57:19+04:00 exit=0

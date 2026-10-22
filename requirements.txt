@@ -1,0 +1,15 @@
+# Python >= 3.10 (runs used 3.11). Pinned to the versions used for the Sudoku A/E runs.
+# Install with scripts/setup_env.sh, or: pip install -r requirements.txt
+# torch is the CUDA 12.9 build, which runs on the cluster's NVIDIA driver 570 (CUDA 12.8);
+# PyPI's default torch build may need a newer driver.
+--extra-index-url https://download.pytorch.org/whl/cu129
+torch==2.13.0+cu129
+numpy==2.3.5
+tqdm==4.66.5
+omegaconf==2.4.0
+transformers==5.17.0
+datasets==5.1.0
+wandb==0.30.0
+# data download and analysis
+gdown==6.4.2
+matplotlib==3.11.2

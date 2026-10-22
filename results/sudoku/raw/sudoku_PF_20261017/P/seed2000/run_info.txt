@@ -1,0 +1,9 @@
+condition=P seed=2000 config=yaml_files/sudoku_PUMA_reference.yaml extra=
+slurm_job=321634 node=gpu-08 start=2026-10-18T01:24:03+04:00
+CUDA_VISIBLE_DEVICES=0,2
+0, GPU-d5d49859-26e6-4780-cf9e-6b99a16a2d3e, NVIDIA A100-SXM4-40GB
+1, GPU-fe2015ee-207d-ed5d-d05c-8609c0dcdf02, NVIDIA A100-SXM4-40GB
+2, GPU-3f327eee-0685-8225-e3b8-0913ea3aceec, NVIDIA A100-SXM4-40GB
+3, GPU-f55b0ad9-5a4c-1c8a-094d-d01db63c531a, NVIDIA A100-SXM4-40GB
+git_head=ad063680ae7d0941c1a3b802c4d1a79ba86d5bb1
+end=2026-10-18T03:02:33+04:00 exit=0

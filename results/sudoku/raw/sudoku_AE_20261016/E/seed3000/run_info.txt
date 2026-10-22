@@ -1,0 +1,9 @@
+condition=E seed=3000 config=yaml_files/sudoku_E_confidence.yaml extra=
+slurm_job=316851 node=gpu-49 start=2026-10-16T14:17:05+04:00
+CUDA_VISIBLE_DEVICES=2,3
+0, GPU-ca220af4-c132-da5b-1090-7a2cf5c782e2, NVIDIA A100-SXM4-40GB
+1, GPU-eafb2930-2f5a-0bd4-5ece-4f177b075c4b, NVIDIA A100-SXM4-40GB
+2, GPU-2fafbdd7-fbeb-986f-18d2-d09c0943c1da, NVIDIA A100-SXM4-40GB
+3, GPU-c2774ee7-aa75-2c52-b370-cbea18fbc21c, NVIDIA A100-SXM4-40GB
+git_head=fe0f864d0f7687af679f15e8f9ffd4e5e1cda363
+end=2026-10-16T15:58:50+04:00 exit=0

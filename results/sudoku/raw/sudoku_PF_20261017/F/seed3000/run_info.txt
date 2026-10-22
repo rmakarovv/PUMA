@@ -1,0 +1,9 @@
+condition=F seed=3000 config=yaml_files/sudoku_F_gtmargin.yaml extra=
+slurm_job=321635 node=gpu-04 start=2026-10-18T02:05:09+04:00
+CUDA_VISIBLE_DEVICES=2,3
+0, GPU-cc1e9750-ccc1-0856-f782-92ad464796ea, NVIDIA A100-SXM4-40GB
+1, GPU-c38df109-dce4-aaad-2f62-3c0abb1bcf71, NVIDIA A100-SXM4-40GB
+2, GPU-2280229d-87e0-13d2-f1cd-4fc85bb6ea5f, NVIDIA A100-SXM4-40GB
+3, GPU-d0511eae-6903-b537-a5aa-ece486ffe182, NVIDIA A100-SXM4-40GB
+git_head=ad063680ae7d0941c1a3b802c4d1a79ba86d5bb1
+end=2026-10-18T03:46:48+04:00 exit=0
