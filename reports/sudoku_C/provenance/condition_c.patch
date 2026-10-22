@@ -1,0 +1,3016 @@
+diff --git a/.gitignore b/.gitignore
+index 3bac577..9c9c093 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,7 @@
+ # local environment, data caches and experiment outputs
+ .venv/
+ data/sudoku_new/
++data/sudoku_c_smoke/
+ runs/
+ ckpts/
+ wandb/
+diff --git a/docs/condition_c_protocol.md b/docs/condition_c_protocol.md
+new file mode 100644
+index 0000000..3cc3b73
+--- /dev/null
++++ b/docs/condition_c_protocol.md
+@@ -0,0 +1,230 @@
++# Condition C: example reuse with independent masks
++
++This experiment extends branch `sudoku-a-e-options`, base commit
++`fe967e2bbb613ed5a1aab903e7c5e111d159b0a6`, with proposal condition C.
++The comparison preserves the completed A/F experiments' model, data, training
++budget, and evaluation protocol. Each job records its actual source state and
++resolved configuration; the base commit alone does not describe the C changes.
++
++## Training contract
++
++C retains a puzzle across the same four scheduled states as E/F, but samples
++a fresh uniform subset of target positions at every transition. Previously
++visible target cells can become masked again. Givens remain visible, and all
++visible target cells contain their training labels. Replacement occurs when a
++slot wraps to the first stage. No confidence threshold or label-dependent
++ordering selects C's masks.
++
++The stored schedule is `(81, 61, 41, 21)` with reference length 81. As in the
++existing E/F implementation, these are fractions of the initially empty cells,
++not literal mask counts over a separate 81-cell solution target. For a puzzle
++with 57 empty cells the counts are 57, 43, 29, and 15. Slots begin at balanced,
++randomly shuffled stages. Initial states use independent uniform subsets; the
++first partially completed cycle can therefore have fewer than four updates.
++
++| Setting | Value |
++|---|---|
++| Seeds | 1000, 2000, 3000, 4000, 5000 |
++| Model | Bidirectional Transformer, 8 layers, width 256, MLP 768, 8 attention/KV heads |
++| Vocabulary / sequence length | 11 / 81 |
++| Dropout / RMSNorm epsilon | 0 / 1e-6 |
++| Training | 2 epochs, 53,570 optimizer updates |
++| Batch | 32 per GPU × 2 GPUs = 64 |
++| Optimizer | AdamW, learning rate 3e-4, weight decay 0.01 |
++| Learning rate schedule | Cosine, 1000 warmup updates |
++| Gradient norm clipping | 1 |
++| EMA | 0.9999 |
++| Forward precision | bf16 autocast |
++| Training data | PUMA Sudoku files, 1,804,462 source training puzzles |
++| Validation-loss split | 5% of training data, split seed 2026 |
++| Generative evaluation | First 999 puzzles of the supplied 99,999-puzzle test set |
++| Evaluation interval | Every 1000 updates and update 53,570 |
++| Saved checkpoints | Every 10,000 updates and update 53,570 |
++| Primary decoder | `top_k_unmasking_1`, greedy, temperature 0 |
++| Additional decoders | `top_k` and `top_k_margin`, each revealing 1, 2, or 3 cells |
++| Evaluation batch | 16 per rank, hard-coded in the inherited evaluator |
++| Evaluation weights | EMA for generation; non-EMA for random-mask validation loss |
++
++The loss averages each example's masked-token negative log probabilities over
++its current masked positions, then averages across the batch. An optimizer
++update trains one batch of current states; a four-state trajectory is four
++updates for that slot. Standard training uses a fresh batch each update, while
++C/E/F consume fewer fresh examples. Identical seed labels pair runs for analysis;
++they do not establish identical random-mask streams or equal data exposure.
++
++## Launch and completion
++
++Use the existing environment/data setup scripts and precompute the Sudoku
++caches before submitting the full study. The Slurm launcher targets partition
++`cscc-gpu-p`, account `cscc-users`, and QoS `cscc-gpu-qos`. The observed account
++limits are four submitted jobs, two running jobs, and four running GPUs.
++`scripts/run_sudoku_C_array.sbatch` therefore submits two array tasks with
++two GPUs each: task 0 runs seeds 1000, 3000, and 5000 sequentially; task 1 runs
++2000 and 4000. All five seeds are included in one submission, with at most two
++seeds training concurrently.
++
++```bash
++mkdir -p runs/logs
++EXP_DIR=runs/sudoku_C_20261022 sbatch scripts/run_sudoku_C_array.sbatch
++```
++
++The launcher rejects smoke overrides and per-run timeouts for the full study.
++After each successful seed, it re-scores the final EMA checkpoint with the three
++precision modes below, using the primary decoder. `DONE` marks successful
++training, while `RESCORE_DONE` records successful completion of all three
++re-scores. Training results and re-score completion remain separate statuses.
++
++After the array terminates, `scripts/rescore_sudoku_C_curve.sbatch` evaluates
++the saved EMA checkpoints at updates 10,000, 20,000, 30,000, 40,000, and 50,000
++in full fp32 for all five seeds. Together with the final 53,570-update score,
++these give the same six checkpoint positions used in the B/D report. The job
++validates checkpoint, source, and data hashes before reusing existing scores.
++`CURVE_RESCORE_DONE` requires all six scores for a seed. Submit the CPU analysis
++after this job so the exported precision table includes the full corrected curve.
++
++```bash
++EXP_DIR=runs/sudoku_C_20261022 sbatch --dependency=afterany:335458 scripts/rescore_sudoku_C_curve.sbatch
++# Use the returned curve job ID for the analysis dependency.
++EXP_DIR=runs/sudoku_C_20261022 sbatch --dependency=afterany:<curve_job_id> scripts/finalize_sudoku_C.sbatch
++```
++
++`scripts/smoke_sudoku_C.sbatch` checks 61 training updates on a separate cache
++of 4096 training records and 999 test records. Its validation ratio of 0.02
++selects 19 puzzles; it checks all six decoders and an EMA checkpoint. Smoke
++artifacts use a separate experiment directory and are excluded from the full
++53,570-update analysis. A submitted or queued full-study job does not count as
++a completed experiment.
++
++## Evaluation precision and baseline provenance
++
++The teammates' [shared results report](https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/reports/Sudoku-progression-conditions-final-accuracy-and-the-bf16-eval-issue--VmlldzoxODE2MjE5Ng)
++documents a precision issue in the inherited decoder. The sharing token is
++intentionally excluded from this repository link.
++
++`sampling.mdm_sampling` computes softmax outside autocast on bf16 forward
++logits, leaving its output probabilities in bf16. Near-one confidence values
++can round to ties and change the reveal order. The report observes large effects
++for some B/D seeds. Its observed preference for lower indices is not a general
++`torch.topk` guarantee: PyTorch documents that tied indices need not be stable.
++
++Training-time evaluation remains the legacy implementation so C's full curve
++is directly comparable to the available A/F curves. Final EMA checkpoint
++re-scores are separate artifacts with explicit modes:
++
++- `legacy_bf16`: inherited bf16 forward and confidence softmax.
++- `bf16_fp32_softmax`: bf16 forward with `F.softmax(logits.float(), dim=-1)`.
++- `full_fp32`: fp32 forward and confidence softmax.
++
++Checkpoint re-scoring uses inference mode, matching the training-time EMA
++evaluation context. The runtime uses the project's pinned PyTorch 2.13 build;
++the external API links below describe the current published API, while the
++installed API docstrings were also checked during implementation.
++
++These are distinct numerical protocols. The report's B/D re-scores use full
++fp32 and exist at only six saved checkpoints. A/F checkpoints were not rescored
++in that report. The reported fixed-softmax results were within 1.2 percentage
++points of full fp32 on 11 final checkpoints; that observation does not establish
++equivalence. Do not pool these protocols, replace legacy learning curves with
++isolated re-scores, or infer 1000-update crossing times from six checkpoint scores.
++
++The separate full-fp32 comparison uses the exact B/D final observations saved
++in `results/sudoku_baselines/bd_full_fp32.json`. The downloaded report artifacts
++do not contain their exact intermediate histories, so C-versus-B/D comparisons
++are restricted to update 53,570. B/D retrospective evaluation hardware, batch
++layout, TF32 settings, and test-prefix hashes were not recorded in those artifacts.
++The script preserves these limits and reports missing C observations explicitly.
++
++```bash
++python3 scripts/compare_sudoku_c_fp32.py \
++  --c-root runs/sudoku_C_20261022 \
++  --out results/sudoku_C_fp32_comparison
++```
++
++The committed baseline records are:
++
++- A: `results/sudoku/raw/sudoku_AE_20261016/A/seed<s>/`.
++- F: `results/sudoku/raw/sudoku_PF_20261017/F/seed<s>/`.
++
++All five runs of each condition reached 53,570 updates. Their legacy primary
++accuracy means and sample standard deviations are A **88.108 ± 1.760%** and
++F **95.736 ± 1.259%**. The copied records contain successful exits in
++`run_info.txt`; they do not contain checkpoint tensors or necessarily `DONE`.
++Original A/F checkpoint paths in metadata are relative
++`runs/sudoku_AE_20261016/A/seed<s>` and
++`runs/sudoku_PF_20261017/F/seed<s>`; the report does not establish their owning
++home directory. W&B run IDs use `A-seed<s>-v2` and `F-seed<s>-v2`.
++
++## Analysis
++
++Run the standard-library comparison from the repository root, replacing the C
++experiment path with the actual output directory:
++
++```bash
++python3 scripts/compare_sudoku_c.py \
++  --c-root runs/sudoku_C_20261022 \
++  --out results/sudoku_C_comparison
++```
++
++The command accepts an experiment root containing `C/seed<s>/`, a root
++containing `seed<s>/` directly, or individual seed directories. Re-running it
++updates the analysis from the current logs. Missing/active seeds remain explicit
++rows; an incomplete run's last observed accuracy is never labeled final.
++Duplicate attempts for a condition/seed are rejected instead of pooled.
++
++Final scores require a successful completion marker or recorded exit 0 and an
++evaluation at the exact update budget. Final means include completed seeds only,
++with their count reported; use all five completed seeds for the main result.
++Standard deviations use `ddof=1`. Partial runs may already establish threshold
++crossings, but threshold means are omitted unless all requested seeds reach
++that target. Crossing requires two consecutive scheduled evaluations at or
++above 50%, 75%, or 90%, and is assigned to the first evaluation. Confirmation
++steps are recorded separately. A last-checkpoint-only crossing is unconfirmed;
++a missing intermediate evaluation cannot confirm a crossing across the gap.
++
++Outputs are `per_seed.csv`, `evals.csv`, `paired.csv`, `summary.json`, and
++`summary.md`. The per-seed file records input hashes, final and observed scores,
++target attainment, train/evaluation timing, and available run provenance.
++Paired differences are C minus A/F; positive accuracy differences favor C,
++while negative update differences indicate fewer C updates. Train time excludes
++evaluation; the sum of measured evaluation durations is reported separately.
++Recorded start/end wall time also includes launch and checkpoint overhead.
++Cross-node timing is observational unless hardware and resource allocation match.
++
++To add separate final re-scores:
++
++```bash
++python3 scripts/compare_sudoku_c.py \
++  --c-root runs/sudoku_C_20261022 \
++  --rescore runs/sudoku_C_20261022 \
++  --out results/sudoku_C_comparison
++```
++
++Directory inputs to `--rescore` select `rescore_*.json`; explicit files are also
++accepted. Each file must use the `checkpoint_rescore` schema from
++`scripts/rescore_sudoku_checkpoint.py`: condition C, seed, checkpoint update,
++EMA flag, precision mode, decoder metrics, measured evaluation time, and
++evaluation metadata. They produce `precision_rescores.csv` and separate summary
++entries, without modifying the primary A/C/F comparison. No W&B uploads or
++training runs are created by the analysis command.
++
++## Departures from the proposal
++
++The completed team experiments use eight model layers rather than six, five
++seeds rather than three, a single 81-cell grid with visible givens rather than
++a separate puzzle prompt and full solution target, and a schedule scaled to
++the empty cells. Generative accuracy is checked on a fixed subset of the supplied
++test set during training; the separate held-out training split supplies validation
++loss only. This is not an untouched final test evaluation. The evaluator checks
++Sudoku constraints and givens, rather than exact equality to the stored solution.
++
++Validation-loss masks are sampled from a common distribution, rather than a
++fixed shared set of masks. Duplicate removal across splits, separate validation puzzles for generative
++evaluation, per-cell accuracy, random-order decoding, and complete data-exposure
++accounting were not established by the inherited experiment records. They are
++not retroactively claimed here. The controlled C comparison preserves the
++existing protocol rather than changing these choices for C alone.
++
++Protocol sources: the repository and raw run records at
++the base commit, the teammates' report, the [PUMA paper](https://arxiv.org/html/2602.10314v2),
++and the official [softmax](https://docs.pytorch.org/docs/2.14/generated/torch.nn.functional.softmax.html)
++and [topk](https://docs.pytorch.org/docs/2.14/generated/torch.topk.html) API documentation.
+diff --git a/progressive.py b/progressive.py
+index db82080..0b63879 100644
+--- a/progressive.py
++++ b/progressive.py
+@@ -111,9 +111,16 @@ class PhasedMasking:
+     reveal_score picks which masked tokens a scheduled step reveals: "confidence"
+     (max_v p(v), the default) or "gt_margin" (p(x0) - max_{v != x0} p(v), the
+     ground-truth margin of Asano et al., which uses the clean label).
++
++    mask_construction="independent" implements condition C: keep each example
++    for the same scheduled stages, but resample its visible target positions
++    uniformly at every state. Previously visible targets may become masked.
++    This requires a fixed mask_schedule and mode="standard" and does not use
++    reveal_score or the values of the model's logits. The default "nested"
++    retains the original progressive unmasking behavior.
+     """
+ 
+-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence"):
++    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence", mask_construction: str = "nested"):
+         if reference_length is None:
+             raise ValueError("reference_length must be configured explicitly")
+         self.train_loader = train_loader
+@@ -129,6 +136,14 @@ class PhasedMasking:
+         self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
+         self.random_tie_break = random_tie_break
+         self.reveal_score = reveal_score
++        self.mask_construction = mask_construction
++        if mask_construction not in ("nested", "independent"):
++            raise ValueError(f"invalid mask_construction {mask_construction!r}")
++        if mask_construction == "independent":
++            if not self.mask_schedule:
++                raise ValueError("independent mask construction requires a fixed mask_schedule")
++            if mode != "standard":
++                raise ValueError("independent mask construction requires mode=standard")
+         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
+         assert reveal_score in ["confidence", "gt_margin"], f"invalid reveal_score {reveal_score}"
+         if self.mask_schedule is not None:
+@@ -300,20 +315,37 @@ class PhasedMasking:
+         # don't perform a scheduled reveal on a chain that is about to be replaced
+         to_reveal = torch.where(replace_on_wrap, torch.zeros_like(to_reveal), to_reveal)
+ 
+-        # progressive unmasking
+-        k_max = int(to_reveal.max().item())
+-        xt = self.xt
+-        if k_max > 0:
+-            score = log_probs.max(dim = 2)[0] # confidence: max_v log p(v)
+-            if self.reveal_score == "gt_margin":
+-                probs = log_probs.exp()
+-                p_true = probs.gather(2, self.x0.unsqueeze(-1)).squeeze(-1)
+-                score = p_true - probs.scatter(2, self.x0.unsqueeze(-1), -1.0).max(dim = 2)[0] # p(x0) - max_{v != x0} p(v)
+-            score_conf = torch.where(mask_idx , score, torch.finfo(log_probs.dtype).min) # [B, L]
+-            if self.random_tie_break:
+-                # break exact confidence ties uniformly at random instead of by position index
+-                score_conf = score_conf + 1e-6 * torch.rand_like(score_conf)
+-            xt = unmask_from_scores(score_conf, to_reveal, self.x0, self.xt)
++        if self.mask_construction == "independent":
++            # Condition C rebuilds from the same clean example, allowing remasking.
++            # Fresh i.i.d. random scores select a uniform subset at the prescribed
++            # count, using the same sampler as the shared initial pool.
++            xt = torch.where(
++                self.state['prompt_mask'],
++                self.x0,
++                torch.full_like(self.x0, self.mask_id),
++            )
++            target_unmasked = torch.where(
++                replace_on_wrap, torch.zeros_like(num_unmask), num_unmask
++            )
++            if int(target_unmasked.max().item()) > 0:
++                score = torch.rand(B, L, device=device, dtype=torch.float)
++                score.masked_fill_(self.state['prompt_mask'], float('-inf'))
++                xt = unmask_from_scores(score, target_unmasked, self.x0, xt)
++        else:
++            # progressive unmasking
++            k_max = int(to_reveal.max().item())
++            xt = self.xt
++            if k_max > 0:
++                score = log_probs.max(dim = 2)[0] # confidence: max_v log p(v)
++                if self.reveal_score == "gt_margin":
++                    probs = log_probs.exp()
++                    p_true = probs.gather(2, self.x0.unsqueeze(-1)).squeeze(-1)
++                    score = p_true - probs.scatter(2, self.x0.unsqueeze(-1), -1.0).max(dim = 2)[0] # p(x0) - max_{v != x0} p(v)
++                score_conf = torch.where(mask_idx , score, torch.finfo(log_probs.dtype).min) # [B, L]
++                if self.random_tie_break:
++                    # break exact confidence ties uniformly at random instead of by position index
++                    score_conf = score_conf + 1e-6 * torch.rand_like(score_conf)
++                xt = unmask_from_scores(score_conf, to_reveal, self.x0, self.xt)
+ 
+         if self.mode in ["confidence_collapse"]:
+             tau = math.log(self.confidence_threshold)
+diff --git a/results/sudoku_baselines/bd_full_fp32.json b/results/sudoku_baselines/bd_full_fp32.json
+new file mode 100644
+index 0000000..6b97ce7
+--- /dev/null
++++ b/results/sudoku_baselines/bd_full_fp32.json
+@@ -0,0 +1,393 @@
++{
++  "schema_version": 1,
++  "description": "Exact B/D final full-fp32 EMA primary-decoder accuracies extracted from the already downloaded shared-report run summaries.",
++  "source": {
++    "report_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/reports/Sudoku-progression-conditions-final-accuracy-and-the-bf16-eval-issue--VmlldzoxODE2MjE5Ng",
++    "report_id": "VmlldzoxODE2MjE5Ng==",
++    "entity": "puma-mbz",
++    "project": "puma-sudoku",
++    "author": "Timur Aisin",
++    "raw_artifact": "report_access/runs.json",
++    "raw_artifact_sha256": "82962a15015f84b806a615b94ea18f0b490f29c58aa6baae9dc907553f9c4d3a",
++    "report_text_artifact": "report_access/report_text.txt",
++    "report_text_sha256": "74ff40bb660d8da314e327e27cbf68d10b31cace1dd669077cd36ec0219012fc",
++    "network_access_for_this_extraction": false
++  },
++  "protocol": {
++    "decoder": "top_k_unmasking_1",
++    "mode": "full_fp32",
++    "weights": "EMA",
++    "test_count": 999,
++    "test_selection": "first 999 puzzles of supplied Sudoku test set",
++    "accuracy_definition": "valid_completed_grid_preserving_givens",
++    "training_budget": 53570,
++    "training_global_batch_size": 64,
++    "training_gpu_count": 2,
++    "seeds": [
++      1000,
++      2000,
++      3000,
++      4000,
++      5000
++    ],
++    "report_checkpoint_steps": [
++      10000,
++      20000,
++      30000,
++      40000,
++      50000,
++      53570
++    ],
++    "available_exact_baseline_steps": [
++      53570
++    ],
++    "baseline_rescore_device": null,
++    "baseline_rescore_world_size": null,
++    "baseline_rescore_batch_size": null,
++    "baseline_rescore_tf32_settings": null,
++    "baseline_test_prefix_sha256": null
++  },
++  "limitations": [
++    "The downloaded report and run-summary artifacts contain exact final values only; full six-checkpoint B/D histories were not downloaded.",
++    "Rounded illustrative intermediate scores in report prose are not used as curve observations.",
++    "C-B/D paired comparisons are restricted to step 53570. No 1000-update threshold times are inferred.",
++    "The report identifies B/D scores as full-fp32 EMA re-scores, but omits re-score device, batch/world size, TF32 settings, and a test-data hash.",
++    "Training node and training configuration metadata do not establish the execution settings used for retrospective B/D rescoring."
++  ],
++  "condition_configurations": {
++    "D": {
++      "model": {
++        "dropout": 0,
++        "num_layers": 8,
++        "vocab_size": 11,
++        "hidden_size": 256,
++        "max_position": 81,
++        "num_kv_heads": 8,
++        "rms_norm_eps": 1e-06,
++        "intermediate_size": 768,
++        "num_attention_heads": 8
++      },
++      "data": {
++        "mmap": false,
++        "seed": 2026,
++        "dataset": "sudoku",
++        "mask_id": 10,
++        "data_dir": "data/sudoku_new",
++        "training": {
++          "cpus": 4,
++          "per_gpu_batch_size": "${training.batch_size}"
++        },
++        "val_ratio": 0.05,
++        "sudoku_type": "new"
++      },
++      "training": {
++        "K": 20,
++        "ema": 0.9999,
++        "mode": "standard",
++        "eos_id": null,
++        "strategy": "progressive",
++        "batch_size": 32,
++        "data_ratio": 1,
++        "eval_steps": 1000,
++        "num_epochs": 2,
++        "save_steps": 10000,
++        "reveal_score": "random",
++        "warmup_steps": 1000,
++        "weight_decay": 0.01,
++        "learning_rate": 0.0003,
++        "logging_steps": 100,
++        "mask_schedule": [
++          81,
++          61,
++          41,
++          21
++        ],
++        "max_grad_norm": 1,
++        "diffusion_layout": "full",
++        "random_tie_break": true,
++        "reference_length": 81,
++        "prompt_only_reset": true,
++        "confidence_threshold": null
++      },
++      "validation": {
++        "ratio": 0.01,
++        "val_dir": "data/sudoku_new",
++        "sampling": {
++          "confidence": [
++            "top_k",
++            "top_k_margin"
++          ],
++          "temperature": 0,
++          "unmasking_num": [
++            1,
++            2,
++            3
++          ]
++        }
++      }
++    },
++    "B": {
++      "model": {
++        "dropout": 0,
++        "num_layers": 8,
++        "vocab_size": 11,
++        "hidden_size": 256,
++        "max_position": 81,
++        "num_kv_heads": 8,
++        "rms_norm_eps": 1e-06,
++        "intermediate_size": 768,
++        "num_attention_heads": 8
++      },
++      "data": {
++        "mmap": false,
++        "seed": 2026,
++        "dataset": "sudoku",
++        "mask_id": 10,
++        "data_dir": "data/sudoku_new",
++        "training": {
++          "cpus": 4,
++          "per_gpu_batch_size": "${training.batch_size}"
++        },
++        "val_ratio": 0.05,
++        "sudoku_type": "new"
++      },
++      "training": {
++        "K": 20,
++        "ema": 0.9999,
++        "mode": "standard",
++        "eos_id": null,
++        "strategy": "progressive",
++        "batch_size": 32,
++        "data_ratio": 1,
++        "eval_steps": 1000,
++        "num_epochs": 2,
++        "save_steps": 10000,
++        "warmup_steps": 1000,
++        "weight_decay": 0.01,
++        "learning_rate": 0.0003,
++        "logging_steps": 100,
++        "mask_schedule": [
++          81,
++          61,
++          41,
++          21
++        ],
++        "max_grad_norm": 1,
++        "reuse_examples": false,
++        "diffusion_layout": "full",
++        "random_tie_break": true,
++        "reference_length": 81,
++        "prompt_only_reset": true,
++        "confidence_threshold": null
++      },
++      "validation": {
++        "ratio": 0.01,
++        "val_dir": "data/sudoku_new",
++        "sampling": {
++          "confidence": [
++            "top_k",
++            "top_k_margin"
++          ],
++          "temperature": 0,
++          "unmasking_num": [
++            1,
++            2,
++            3
++          ]
++        }
++      }
++    }
++  },
++  "runs": [
++    {
++      "condition": "B",
++      "seed": 1000,
++      "wandb_run_id": "B-seed1000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/B-seed1000-v2",
++      "experiment": "sudoku_B_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed1000",
++      "training_node": "gpu-06",
++      "slurm_job": "325796",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.8948948948948949
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "B",
++      "seed": 2000,
++      "wandb_run_id": "B-seed2000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/B-seed2000-v2",
++      "experiment": "sudoku_B_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed2000",
++      "training_node": "gpu-06",
++      "slurm_job": "325796",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.5105105105105106
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "B",
++      "seed": 3000,
++      "wandb_run_id": "B-seed3000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/B-seed3000-v2",
++      "experiment": "sudoku_B_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed3000",
++      "training_node": "gpu-06",
++      "slurm_job": "325796",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.9369369369369368
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "B",
++      "seed": 4000,
++      "wandb_run_id": "B-seed4000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/B-seed4000-v2",
++      "experiment": "sudoku_B_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed4000",
++      "training_node": "gpu-06",
++      "slurm_job": "325796",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.8898898898898899
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "B",
++      "seed": 5000,
++      "wandb_run_id": "B-seed5000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/B-seed5000-v2",
++      "experiment": "sudoku_B_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_B_20261019/seed5000",
++      "training_node": "gpu-06",
++      "slurm_job": "325796",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.7377377377377378
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "D",
++      "seed": 1000,
++      "wandb_run_id": "D-seed1000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/D-seed1000-v2",
++      "experiment": "sudoku_D_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed1000",
++      "training_node": "gpu-07",
++      "slurm_job": "325797",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.8208208208208209
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "D",
++      "seed": 2000,
++      "wandb_run_id": "D-seed2000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/D-seed2000-v2",
++      "experiment": "sudoku_D_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed2000",
++      "training_node": "gpu-07",
++      "slurm_job": "325797",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.4584584584584585
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "D",
++      "seed": 3000,
++      "wandb_run_id": "D-seed3000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/D-seed3000-v2",
++      "experiment": "sudoku_D_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed3000",
++      "training_node": "gpu-07",
++      "slurm_job": "325797",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.928928928928929
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "D",
++      "seed": 4000,
++      "wandb_run_id": "D-seed4000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/D-seed4000-v2",
++      "experiment": "sudoku_D_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed4000",
++      "training_node": "gpu-07",
++      "slurm_job": "325797",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.6976976976976977
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    },
++    {
++      "condition": "D",
++      "seed": 5000,
++      "wandb_run_id": "D-seed5000-v2",
++      "wandb_run_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/runs/D-seed5000-v2",
++      "experiment": "sudoku_D_20261019",
++      "state": "finished",
++      "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
++      "checkpoint_directory": "/home/timur.aisin/intro_to_ml/runs/sudoku_D_20261019/seed5000",
++      "training_node": "gpu-07",
++      "slurm_job": "325797",
++      "scores": [
++        {
++          "step": 53570,
++          "accuracy": 0.8008008008008008
++        }
++      ],
++      "source_summary_metric": "eval_fp32/acc_top_k_unmasking_1"
++    }
++  ]
++}
+diff --git a/scripts/bootstrap_c.sh b/scripts/bootstrap_c.sh
+new file mode 100755
+index 0000000..480f73e
+--- /dev/null
++++ b/scripts/bootstrap_c.sh
+@@ -0,0 +1,26 @@
++#!/bin/bash
++# Install the team's pinned environment and prepare its original Sudoku data.
++set -euo pipefail
++cd /home/anton.egorov/PUMA-C
++source /etc/profile
++module load anaconda3
++base=/home/anton.egorov/puma-python311
++export CONDA_PKGS_DIRS=/home/anton.egorov/.cache/puma-conda-pkgs
++if [[ ! -x "$base/bin/python" ]]; then
++    conda create -y -p "$base" python=3.11
++fi
++if [[ ! -f runs/ENV_READY ]]; then
++    if [[ ! -x .venv/bin/python ]]; then
++        BASE_PYTHON="$base/bin/python" bash scripts/setup_env.sh
++    else
++        .venv/bin/python -m pip install -r requirements.txt
++    fi
++    .venv/bin/python -m pip check
++    .venv/bin/python -m pip freeze > runs/environment-freeze.txt
++    touch runs/ENV_READY
++fi
++bash scripts/download_sudoku.sh
++mkdir -p runs/logs
++sbatch --parsable scripts/preprocess_sudoku.sbatch > runs/preprocess_job_id.txt
++cat runs/preprocess_job_id.txt
++touch runs/BOOTSTRAP_SUBMITTED
+diff --git a/scripts/compare_sudoku_c.py b/scripts/compare_sudoku_c.py
+new file mode 100644
+index 0000000..88bca20
+--- /dev/null
++++ b/scripts/compare_sudoku_c.py
+@@ -0,0 +1,395 @@
++"""Compare condition C with committed A/F runs using the Python standard library.
++
++Only completed runs evaluated at the specified budget contribute final results.
++Checkpoint re-scores are exported separately because A/F use legacy bf16 decoding.
++"""
++from __future__ import annotations
++
++import argparse
++import csv
++from datetime import datetime
++import hashlib
++import json
++import math
++from pathlib import Path
++import re
++import statistics
++import sys
++from typing import Any
++
++DEFAULT_SEEDS = (1000, 2000, 3000, 4000, 5000)
++TARGETS = (50, 75, 90)
++MODES = {"legacy_bf16", "bf16_fp32_softmax", "full_fp32"}
++REPO_ROOT = Path(__file__).resolve().parents[1]
++
++
++def number(value: Any, label: str, minimum: float = 0.0, maximum: float | None = None) -> float:
++    if isinstance(value, bool) or not isinstance(value, (int, float)):
++        raise ValueError(f"{label}: expected a number, got {value!r}")
++    result = float(value)
++    if not math.isfinite(result) or result < minimum or (maximum is not None and result > maximum):
++        raise ValueError(f"{label}: out-of-range value {value!r}")
++    return result
++
++
++def integer(value: Any, label: str) -> int:
++    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
++        raise ValueError(f"{label}: expected a nonnegative integer")
++    return value
++
++
++def digest(path: Path) -> str | None:
++    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
++
++
++def run_info(path: Path) -> dict[str, str]:
++    if not path.is_file():
++        return {}
++    fields = ("condition", "seed", "slurm_job", "node", "start", "end", "exit", "git_head")
++    pattern = r"(?:^|\s)(" + "|".join(fields) + r")=(\S+)"
++    return dict(re.findall(pattern, path.read_text(), flags=re.MULTILINE))
++
++
++def discover(roots: list[Path], conditions: set[str], seeds: list[int], warnings: list[str]) -> dict[tuple[str, int], Path]:
++    found: dict[tuple[str, int], Path] = {}
++    for root in roots:
++        if not root.exists():
++            warnings.append(f"Input root does not yet exist: {root}")
++            continue
++        paths = [root] if root.is_file() else sorted(root.rglob("metrics.jsonl"))
++        for path in paths:
++            if path.name != "metrics.jsonl":
++                continue
++            directory = path.parent.resolve()
++            info = run_info(directory / "run_info.txt")
++            match = re.fullmatch(r"seed(\d+)", directory.name)
++            if match is None and "seed" not in info:
++                raise ValueError(f"Cannot determine run seed: {directory}")
++            seed = int(info.get("seed", match.group(1) if match else ""))
++            fallback = "C" if conditions == {"C"} else directory.parent.name
++            condition = info.get("condition", fallback)
++            if condition not in conditions:
++                continue
++            if seed not in seeds:
++                warnings.append(f"Ignoring unrequested seed {condition}:{seed}: {directory}")
++                continue
++            key = (condition, seed)
++            if key in found and found[key] != directory:
++                raise ValueError(f"Duplicate {condition}:{seed} runs; choose one input root: {found[key]} and {directory}")
++            found[key] = directory
++    return found
++
++
++def load_metrics(path: Path, decoder: str, budget: int, warnings: list[str]) -> list[dict[str, Any]]:
++    text = path.read_text()
++    lines = text.splitlines()
++    records: list[dict[str, Any]] = []
++    eval_steps: set[int] = set()
++    previous_step = -1
++    for index, line in enumerate(lines, 1):
++        if not line.strip():
++            continue
++        try:
++            record = json.loads(line)
++        except json.JSONDecodeError as exc:
++            if index == len(lines) and not text.endswith("\n"):
++                warnings.append(f"Ignoring incomplete trailing JSON while run is active: {path}:{index}")
++                break
++            raise ValueError(f"Malformed JSON at {path}:{index}: {exc}") from exc
++        if not isinstance(record, dict):
++            raise ValueError(f"{path}:{index}: expected a JSON object")
++        step = integer(record.get("step"), f"{path}:{index}:step")
++        if step < previous_step or step > budget:
++            raise ValueError(f"{path}:{index}: nonmonotonic step or step beyond budget: {step}")
++        previous_step = step
++        number(record.get("train_time_s"), f"{path}:{index}:train_time_s")
++        if "val_acc" in record:
++            if step in eval_steps:
++                raise ValueError(f"Duplicate evaluation step {step} in {path}; do not combine attempts")
++            eval_steps.add(step)
++            scores = record["val_acc"]
++            if not isinstance(scores, dict) or decoder not in scores:
++                raise ValueError(f"{path}:{index}: missing decoder {decoder!r}")
++            number(scores[decoder], f"{path}:{index}:accuracy", maximum=1.0)
++            number(record.get("val_loss"), f"{path}:{index}:val_loss")
++            number(record.get("eval_time_s"), f"{path}:{index}:eval_time_s")
++        records.append(record)
++    return records
++
++
++def empty_run(condition: str, seed: int) -> dict[str, Any]:
++    row: dict[str, Any] = {
++        "condition": condition, "seed": seed, "precision": "legacy_bf16",
++        "status": "missing", "is_complete": False, "run_dir": None,
++        "observed_step": None, "last_eval_step": None, "last_observed_accuracy": None,
++        "final_accuracy": None, "final_val_loss": None,
++        "observed_train_time_s": None, "observed_eval_time_s": None,
++        "final_train_time_s": None, "final_eval_time_s": None, "wall_elapsed_s": None,
++    }
++    for target in TARGETS:
++        row.update({f"target_{target}_status": "awaiting_evaluation", f"updates_to_{target}": None,
++                    f"confirmation_step_{target}": None, f"train_time_to_{target}_s": None,
++                    f"eval_time_to_{target}_s": None})
++    return row
++
++
++def summarize_run(condition: str, seed: int, directory: Path, args: argparse.Namespace,
++                  warnings: list[str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
++    row = empty_run(condition, seed)
++    path = directory / "metrics.jsonl"
++    records = load_metrics(path, args.decoder, args.budget, warnings)
++    info = run_info(directory / "run_info.txt")
++    evals = [record for record in records if "val_acc" in record]
++    row.update(run_dir=str(directory), metrics_sha256=digest(path),
++               config_sha256=digest(directory / "config.yaml"),
++               git_head=info.get("git_head"), slurm_job=info.get("slurm_job"), node=info.get("node"),
++               start=info.get("start"), end=info.get("end"), exit_code=info.get("exit"))
++    completion_marker = (directory / "DONE").is_file() or info.get("exit") == "0"
++    failed = info.get("exit") not in (None, "0")
++    final = next((record for record in evals if record["step"] == args.budget), None)
++    complete = completion_marker and not failed and final is not None
++    row["is_complete"] = complete
++    row["status"] = ("complete" if complete else "failed" if failed else
++                     "completed_short_of_budget" if completion_marker else
++                     "budget_evaluated_awaiting_completion" if final is not None else "partial")
++    row["observed_step"] = records[-1]["step"] if records else None
++    row["observed_train_time_s"] = records[-1]["train_time_s"] if records else None
++    row["observed_eval_time_s"] = sum(record["eval_time_s"] for record in evals)
++    if info.get("start") and info.get("end"):
++        try:
++            duration = (datetime.fromisoformat(info["end"]) - datetime.fromisoformat(info["start"])).total_seconds()
++            row["wall_elapsed_s"] = number(duration, f"{directory}:wall_elapsed_s")
++        except ValueError as exc:
++            warnings.append(f"Cannot calculate run wall time for {directory}: {exc}")
++    if evals:
++        row.update(last_eval_step=evals[-1]["step"], last_observed_accuracy=evals[-1]["val_acc"][args.decoder])
++    if complete:
++        row.update(final_accuracy=final["val_acc"][args.decoder], final_val_loss=final["val_loss"],
++                   final_train_time_s=final["train_time_s"], final_eval_time_s=row["observed_eval_time_s"])
++    for target in TARGETS:
++        hit = None
++        confirmation = None
++        for left, right in zip(evals, evals[1:]):
++            expected_next = min((left["step"] // args.eval_interval + 1) * args.eval_interval, args.budget)
++            if right["step"] != expected_next:
++                continue
++            if min(left["val_acc"][args.decoder], right["val_acc"][args.decoder]) >= target / 100:
++                hit, confirmation = left, right
++                break
++        if hit is not None:
++            row.update({f"target_{target}_status": "confirmed", f"updates_to_{target}": hit["step"],
++                        f"confirmation_step_{target}": confirmation["step"],
++                        f"train_time_to_{target}_s": hit["train_time_s"],
++                        f"eval_time_to_{target}_s": sum(r["eval_time_s"] for r in evals if r["step"] <= hit["step"])})
++        elif evals:
++            row[f"target_{target}_status"] = ("unconfirmed_at_last_evaluation" if evals[-1]["val_acc"][args.decoder] >= target / 100
++                                                else "not_reached_within_budget" if complete else "not_yet_confirmed")
++    eval_rows = [{"condition": condition, "seed": seed, "precision": "legacy_bf16", "step": record["step"],
++                  "accuracy": record["val_acc"][args.decoder], "val_loss": record["val_loss"],
++                  "train_time_s": record["train_time_s"], "eval_time_s": record["eval_time_s"]} for record in evals]
++    return row, eval_rows
++
++
++def stats(values: list[float | int]) -> dict[str, Any]:
++    return {"n": len(values), "mean": statistics.mean(values) if values else None,
++            "sample_sd": statistics.stdev(values) if len(values) > 1 else None}
++
++
++def paired_rows(runs: list[dict[str, Any]], seeds: list[int]) -> list[dict[str, Any]]:
++    indexed = {(run["condition"], run["seed"]): run for run in runs}
++    rows = []
++    for baseline in ("A", "F"):
++        for seed in seeds:
++            c, other = indexed[("C", seed)], indexed[(baseline, seed)]
++            complete = c["is_complete"] and other["is_complete"]
++            row = {"contrast": f"C-{baseline}", "seed": seed, "precision": "legacy_bf16",
++                   "final_pair_complete": complete, "c_status": c["status"], "baseline_status": other["status"],
++                   "final_accuracy_difference_pp": 100 * (c["final_accuracy"] - other["final_accuracy"]) if complete else None,
++                   "final_val_loss_difference": c["final_val_loss"] - other["final_val_loss"] if complete else None,
++                   "final_train_time_difference_s": c["final_train_time_s"] - other["final_train_time_s"] if complete else None}
++            for target in TARGETS:
++                for prefix in ("updates_to", "train_time_to"):
++                    key = f"{prefix}_{target}" + ("_s" if prefix == "train_time_to" else "")
++                    row[f"{key}_difference"] = c[key] - other[key] if c[key] is not None and other[key] is not None else None
++            rows.append(row)
++    return rows
++
++
++def load_rescores(paths: list[Path], args: argparse.Namespace) -> list[dict[str, Any]]:
++    files: set[Path] = set()
++    for path in paths:
++        if not path.exists():
++            raise ValueError(f"Requested re-score input does not exist: {path}")
++        if path.is_dir():
++            files.update(p.resolve() for p in path.rglob("rescore_*.json"))
++        else:
++            files.add(path.resolve())
++    rows = []
++    seen: set[tuple[int, int, str]] = set()
++    for path in sorted(files):
++        record = json.loads(path.read_text())
++        if not isinstance(record, dict) or record.get("schema_version") != 1 or record.get("type") != "checkpoint_rescore" or record.get("condition") != "C":
++            raise ValueError(f"Invalid C checkpoint-rescore schema: {path}")
++        mode = record.get("mode")
++        if mode not in MODES or record.get("is_ema_snapshot") is not True:
++            raise ValueError(f"Invalid precision mode or non-EMA checkpoint: {path}")
++        seed = integer(record.get("seed"), f"{path}:seed")
++        step = integer(record.get("step"), f"{path}:step")
++        if seed not in args.seeds or step > args.budget:
++            raise ValueError(f"Unexpected seed or checkpoint step: {path}")
++        key = (seed, step, mode)
++        if key in seen:
++            raise ValueError(f"Duplicate checkpoint re-score {key}: {path}")
++        seen.add(key)
++        evaluation = record.get("evaluation", {})
++        precision = record.get("precision", {})
++        if not isinstance(evaluation, dict) or not isinstance(precision, dict) or not isinstance(record.get("metrics"), dict):
++            raise ValueError(f"Invalid evaluation, precision, or metrics object: {path}")
++        accuracy = number(record.get("metrics", {}).get(args.decoder), f"{path}:accuracy", maximum=1.0)
++        rows.append({"condition": "C", "seed": seed, "step": step, "precision": mode,
++                     "accuracy": accuracy, "is_final_budget_checkpoint": step == args.budget,
++                     "checkpoint": record.get("checkpoint"), "checkpoint_sha256": record.get("checkpoint_sha256"), "decoder": args.decoder,
++                     "eval_time_s": number(record.get("eval_time_s"), f"{path}:eval_time_s"),
++                     "test_count": evaluation.get("test_count"), "world_size": evaluation.get("world_size"),
++                     "per_rank_batch_size": evaluation.get("per_rank_batch_size"),
++                     "validation_ratio": evaluation.get("validation_ratio"),
++                     "data_prefix_sha256": evaluation.get("data_prefix_sha256"),
++                     "accuracy_definition": evaluation.get("accuracy_definition"),
++                     "model_forward": precision.get("model_forward"), "softmax": precision.get("softmax"),
++                     "allow_tf32_matmul": precision.get("allow_tf32_matmul"),
++                     "float32_matmul_precision": precision.get("float32_matmul_precision"),
++                     "torch_version": record.get("torch_version"), "source_json": str(path), "source_sha256": digest(path)})
++    return rows
++
++
++def write_csv(path: Path, rows: list[dict[str, Any]], empty_fields: list[str]) -> None:
++    fields = list(dict.fromkeys(key for row in rows for key in row)) or empty_fields
++    with path.open("w", newline="") as handle:
++        writer = csv.DictWriter(handle, fieldnames=fields)
++        writer.writeheader()
++        writer.writerows(rows)
++
++
++def format_stats(value: dict[str, Any], scale: float = 1.0, digits: int = 2) -> str:
++    if value["n"] == 0:
++        return "—"
++    rendered = f"{scale * value['mean']:.{digits}f}"
++    if value["sample_sd"] is not None:
++        rendered += f" ± {scale * value['sample_sd']:.{digits}f}"
++    return rendered
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--baseline-root", type=Path, default=REPO_ROOT / "results/sudoku/raw")
++    parser.add_argument("--c-root", type=Path, nargs="*", default=[], help="C experiment or seed directories; missing roots are reported as pending")
++    parser.add_argument("--rescore", type=Path, nargs="*", default=[], help="Optional C re-score JSON files or directories containing rescore_*.json")
++    parser.add_argument("--out", type=Path, required=True)
++    parser.add_argument("--seeds", type=int, nargs="+", default=list(DEFAULT_SEEDS))
++    parser.add_argument("--budget", type=int, default=53570)
++    parser.add_argument("--eval-interval", type=int, default=1000)
++    parser.add_argument("--decoder", default="top_k_unmasking_1")
++    args = parser.parse_args()
++    if args.budget <= 0 or args.eval_interval <= 0 or any(seed < 0 for seed in args.seeds) or len(set(args.seeds)) != len(args.seeds):
++        parser.error("Budget and interval must be positive; seeds must be distinct nonnegative integers")
++    warnings: list[str] = []
++    try:
++        discovered = discover([args.baseline_root], {"A", "F"}, args.seeds, warnings)
++        discovered.update(discover(args.c_root, {"C"}, args.seeds, warnings))
++        runs, evals = [], []
++        for condition in ("A", "C", "F"):
++            for seed in args.seeds:
++                directory = discovered.get((condition, seed))
++                row, observations = summarize_run(condition, seed, directory, args, warnings) if directory else (empty_run(condition, seed), [])
++                runs.append(row)
++                evals.extend(observations)
++        pairs = paired_rows(runs, args.seeds)
++        rescores = load_rescores(args.rescore, args)
++        groups = {}
++        for condition in ("A", "C", "F"):
++            group = [run for run in runs if run["condition"] == condition]
++            completed = [run for run in group if run["is_complete"]]
++            group_stats = {"expected_seeds": len(args.seeds), "completed_seeds": len(completed),
++                           "final_accuracy": stats([run["final_accuracy"] for run in completed]),
++                           "final_val_loss": stats([run["final_val_loss"] for run in completed]),
++                           "final_train_time_s": stats([run["final_train_time_s"] for run in completed]),
++                           "final_eval_time_s": stats([run["final_eval_time_s"] for run in completed]), "targets": {}}
++            for target in TARGETS:
++                hits = [run for run in group if run[f"updates_to_{target}"] is not None]
++                all_reached = len(hits) == len(args.seeds)
++                group_stats["targets"][str(target)] = {"reached_count": len(hits), "all_seeds_reached": all_reached,
++                    "updates": stats([run[f"updates_to_{target}"] for run in hits]) if all_reached else None,
++                    "train_time_s": stats([run[f"train_time_to_{target}_s"] for run in hits]) if all_reached else None}
++            groups[condition] = group_stats
++        pair_stats = {}
++        for contrast in ("C-A", "C-F"):
++            group = [row for row in pairs if row["contrast"] == contrast]
++            keys = [key for key in group[0] if "difference" in key]
++            pair_stats[contrast] = {key: stats([row[key] for row in group if row[key] is not None]) for key in keys}
++        rescore_stats = []
++        for mode, step in sorted({(row["precision"], row["step"]) for row in rescores}):
++            group = [row for row in rescores if row["precision"] == mode and row["step"] == step]
++            protocol_keys = ("test_count", "world_size", "per_rank_batch_size", "accuracy_definition", "data_prefix_sha256",
++                             "model_forward", "softmax", "allow_tf32_matmul", "float32_matmul_precision")
++            protocols = {tuple(row[key] for key in protocol_keys) for row in group}
++            if len(protocols) != 1:
++                raise ValueError(f"Re-score protocol differs across seeds for {mode} at {step}")
++            rescore_stats.append({"precision": mode, "step": step, "expected_seeds": len(args.seeds),
++                                  "accuracy": stats([row["accuracy"] for row in group])})
++        summary = {"decoder": args.decoder, "training_curve_precision": "legacy_bf16", "budget": args.budget,
++                   "evaluation_interval": args.eval_interval, "seeds": args.seeds,
++                   "standard_deviation": "sample (ddof=1)", "conditions": groups, "paired_differences": pair_stats,
++                   "checkpoint_rescores_separate": rescore_stats, "warnings": warnings,
++                   "caveats": ["Final statistics include only verified completed runs evaluated at the stated budget; n is reported.",
++                               "Threshold means are omitted unless every requested seed has a confirmed crossing.",
++                               "A/F baselines use legacy bf16 confidence softmax. C re-scores are never pooled into that comparison.",
++                               "BF16 confidence rounding can change reveal order and materially affect accuracy and threshold times; legacy results describe the original numerical decoder.",
++                               "A/F full-fp32 checkpoint re-scores are unavailable in these inputs, so C re-scores alone cannot establish an A/C/F ranking under full-fp32 evaluation.",
++                               "Checkpoint re-scores provide no new 1000-update learning curve or threshold estimates.",
++                               "train_time_s excludes evaluation; eval_time_s is summed separately. Hardware differences limit wall-time comparisons."]}
++        args.out.mkdir(parents=True, exist_ok=True)
++        write_csv(args.out / "per_seed.csv", runs, ["condition", "seed", "status"])
++        write_csv(args.out / "evals.csv", evals, ["condition", "seed", "step", "accuracy"])
++        write_csv(args.out / "paired.csv", pairs, ["contrast", "seed"])
++        write_csv(args.out / "precision_rescores.csv", rescores, ["condition", "seed", "step", "precision", "accuracy"])
++        (args.out / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
++        lines = ["# Condition C comparison", "", f"Budget: {args.budget:,} updates. Decoder: `{args.decoder}`. Seeds: {', '.join(map(str, args.seeds))}.",
++                 "Training-curve comparisons use legacy bf16 confidence softmax. Values are mean ± sample SD; final columns include completed seeds only.", "",
++                 "BF16 confidence rounding can change reveal order and materially affect accuracy and threshold times. These legacy results describe the original numerical decoder. A/F full-fp32 re-scores are unavailable here, so the separate C re-scores cannot establish an A/C/F ranking under full-fp32 evaluation.", "",
++                 "| Condition | Completed / requested | Final accuracy (%) | Final validation loss | Train minutes | Eval minutes | Updates to 50% | Updates to 75% | Updates to 90% |",
++                 "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
++        for condition, group in groups.items():
++            cells = [condition, f"{group['completed_seeds']} / {group['expected_seeds']}", format_stats(group["final_accuracy"], 100),
++                     format_stats(group["final_val_loss"], digits=4), format_stats(group["final_train_time_s"], 1 / 60),
++                     format_stats(group["final_eval_time_s"], 1 / 60)]
++            for target in TARGETS:
++                result = group["targets"][str(target)]
++                cells.append(format_stats(result["updates"], digits=0) if result["all_seeds_reached"] else f"{result['reached_count']} / {len(args.seeds)} confirmed")
++            lines.append("| " + " | ".join(cells) + " |")
++        lines.extend(["", "Paired final differences use C minus the baseline; positive accuracy differences favor C. Negative update differences indicate fewer C updates.", "",
++                      "| Contrast | Completed pairs | Final accuracy difference (percentage points) |", "|---|---:|---:|"])
++        for contrast, group in pair_stats.items():
++            result = group["final_accuracy_difference_pp"]
++            lines.append(f"| {contrast} | {result['n']} / {len(args.seeds)} | {format_stats(result)} |")
++        if rescore_stats:
++            lines.extend(["", "## Separate C checkpoint re-scores", "", "These values do not replace legacy bf16 results or establish new threshold times.", "",
++                          "| Precision | Checkpoint update | Seeds | Accuracy (%) |", "|---|---:|---:|---:|"])
++            for result in rescore_stats:
++                lines.append(f"| {result['precision']} | {result['step']} | {result['accuracy']['n']} / {len(args.seeds)} | {format_stats(result['accuracy'], 100)} |")
++        lines.extend(["", "`per_seed.csv` includes partial-run status, last observed scores, confirmation updates, and measured timing. `paired.csv` contains per-seed differences.",
++                      "A crossing needs two consecutive scheduled evaluations at or above the target; it is assigned to the first. A final unconfirmed crossing is not reached. Missing intermediate evaluations do not confirm a crossing.",
++                      "Generation scores check completed Sudoku validity and preservation of givens. Training and evaluation times are separate; wall time also depends on hardware and launch/checkpoint overhead."])
++        if warnings:
++            lines.extend(["", "Input notes:", ""] + [f"- {warning}" for warning in warnings])
++        (args.out / "summary.md").write_text("\n".join(lines) + "\n")
++        print(f"Wrote {len(runs)} requested run rows, {len(evals)} evaluations, {len(rescores)} separate re-scores to {args.out}")
++        for warning in warnings:
++            print(f"Note: {warning}", file=sys.stderr)
++        return 0
++    except (OSError, ValueError, TypeError, KeyError) as exc:
++        print(f"Comparison failed: {exc}", file=sys.stderr)
++        return 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/compare_sudoku_c_fp32.py b/scripts/compare_sudoku_c_fp32.py
+new file mode 100644
+index 0000000..6530dff
+--- /dev/null
++++ b/scripts/compare_sudoku_c_fp32.py
+@@ -0,0 +1,243 @@
++"""Compare C full-fp32 EMA final checkpoints with published B/D re-scores.
++
++Standard library only. Uses exact final B/D values already retrieved from the
++shared report; the downloaded artifacts do not include their full histories.
++No threshold times are estimated from the sparse checkpoint observations.
++
++Usage:
++    python scripts/compare_sudoku_c_fp32.py \
++        --c-root runs/sudoku_C_20261022 --out results/sudoku_C_fp32_comparison
++"""
++from __future__ import annotations
++
++import argparse
++import csv
++import hashlib
++import json
++import math
++from pathlib import Path
++import statistics
++import sys
++from typing import Any
++
++SEEDS = (1000, 2000, 3000, 4000, 5000)
++STEPS = (10000, 20000, 30000, 40000, 50000, 53570)
++FINAL_STEP = STEPS[-1]
++DECODER = "top_k_unmasking_1"
++ACCURACY_DEFINITION = "valid_completed_grid_preserving_givens"
++DEFAULT_BASELINES = Path(__file__).resolve().parents[1] / "results/sudoku_baselines/bd_full_fp32.json"
++
++
++def sha256(path: Path) -> str:
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++def score(value: Any, context: str) -> float:
++    if isinstance(value, bool) or not isinstance(value, (float, int)):
++        raise ValueError(f"{context}: accuracy must be a numeric value")
++    result = float(value)
++    if not math.isfinite(result) or not 0 <= result <= 1:
++        raise ValueError(f"{context}: accuracy must be finite and in [0,1]")
++    return result
++
++
++def read_json(path: Path) -> dict[str, Any]:
++    value = json.loads(path.read_text())
++    if not isinstance(value, dict):
++        raise ValueError(f"Expected a JSON object: {path}")
++    return value
++
++
++def load_baselines(path: Path) -> tuple[dict[str, Any], dict[tuple[str, int, int], dict[str, Any]]]:
++    document = read_json(path)
++    protocol = document.get("protocol", {})
++    expected = {"decoder": DECODER, "mode": "full_fp32", "weights": "EMA", "test_count": 999,
++                "accuracy_definition": ACCURACY_DEFINITION, "training_budget": FINAL_STEP}
++    if document.get("schema_version") != 1 or any(protocol.get(key) != value for key, value in expected.items()):
++        raise ValueError("Baseline schema or protocol does not match this full-fp32 comparison")
++    if protocol.get("seeds") != list(SEEDS) or protocol.get("available_exact_baseline_steps") != [FINAL_STEP]:
++        raise ValueError("Expected five matched baseline seeds with exact final-only observations")
++    indexed: dict[tuple[str, int, int], dict[str, Any]] = {}
++    for run in document.get("runs", []):
++        condition, seed = run.get("condition"), run.get("seed")
++        if condition not in ("B", "D") or isinstance(seed, bool) or seed not in SEEDS or run.get("state") != "finished":
++            raise ValueError("Invalid condition, seed, or unfinished run in baseline data")
++        for observation in run.get("scores", []):
++            step = observation.get("step")
++            if isinstance(step, bool) or step != FINAL_STEP:
++                raise ValueError("Only exact baseline final observations are available in this comparison")
++            key = (condition, seed, step)
++            if key in indexed:
++                raise ValueError(f"Duplicate baseline observation: {key}")
++            indexed[key] = {"condition": condition, "seed": seed, "step": step,
++                            "accuracy": score(observation.get("accuracy"), str(key)),
++                            "wandb_run_id": run.get("wandb_run_id"), "wandb_run_url": run.get("wandb_run_url"),
++                            "checkpoint_directory": run.get("checkpoint_directory"),
++                            "source_summary_metric": run.get("source_summary_metric")}
++    expected_keys = {(condition, seed, FINAL_STEP) for condition in ("B", "D") for seed in SEEDS}
++    if set(indexed) != expected_keys:
++        raise ValueError("Baseline file must contain the ten exact B/D final observations")
++    return document, indexed
++
++
++def load_c(roots: list[Path], warnings: list[str]) -> dict[tuple[str, int, int], dict[str, Any]]:
++    paths: set[Path] = set()
++    for root in roots:
++        if not root.exists():
++            warnings.append(f"C input root is not available yet: {root}")
++            continue
++        if root.is_dir():
++            paths.update(path.resolve() for path in root.rglob("rescore_full_fp32*.json"))
++        else:
++            paths.add(root.resolve())
++    indexed: dict[tuple[str, int, int], dict[str, Any]] = {}
++    protocols: set[tuple[Any, ...]] = set()
++    for path in sorted(paths):
++        record = read_json(path)
++        expected = {"schema_version": 1, "type": "checkpoint_rescore", "condition": "C", "mode": "full_fp32",
++                    "is_ema_snapshot": True}
++        if any(record.get(key) != value for key, value in expected.items()):
++            raise ValueError(f"C input must be a full-fp32 EMA checkpoint re-score: {path}")
++        seed, step = record.get("seed"), record.get("step")
++        if isinstance(seed, bool) or not isinstance(seed, int) or seed not in SEEDS:
++            raise ValueError(f"Unexpected C seed: {path}")
++        if isinstance(step, bool) or not isinstance(step, int) or step not in STEPS:
++            raise ValueError(f"Unexpected C checkpoint update: {path}")
++        evaluation, precision = record.get("evaluation", {}), record.get("precision", {})
++        metrics = record.get("metrics", {})
++        if not all(isinstance(value, dict) for value in (evaluation, precision, metrics)):
++            raise ValueError(f"Missing evaluation, precision, or metrics object: {path}")
++        if evaluation.get("test_count") != 999 or evaluation.get("accuracy_definition") != ACCURACY_DEFINITION:
++            raise ValueError(f"C evaluation must use 999 puzzles and the inherited grid-validity definition: {path}")
++        if precision.get("model_forward") != "float32" or precision.get("softmax") != "float32":
++            raise ValueError(f"C input must use fp32 forward and softmax, not a mixed-precision mode: {path}")
++        data_hash = evaluation.get("data_prefix_sha256")
++        if not isinstance(data_hash, str) or len(data_hash) != 64:
++            raise ValueError(f"Missing C test-prefix SHA256: {path}")
++        sampling = evaluation.get("sampling", {})
++        if not isinstance(sampling, dict) or sampling.get("temperature") != 0:
++            raise ValueError(f"C primary decoder must use greedy temperature-zero sampling: {path}")
++        key = ("C", seed, step)
++        if key in indexed:
++            raise ValueError(f"Duplicate C checkpoint observation {key}; select a single experiment: {path}")
++        protocols.add((data_hash, evaluation.get("world_size"), evaluation.get("per_rank_batch_size"),
++                       precision.get("allow_tf32_matmul"), precision.get("float32_matmul_precision")))
++        indexed[key] = {"condition": "C", "seed": seed, "step": step,
++                        "accuracy": score(metrics.get(DECODER), str(path)), "source_json": str(path),
++                        "source_json_sha256": sha256(path), "checkpoint": record.get("checkpoint"),
++                        "checkpoint_sha256": record.get("checkpoint_sha256"),
++                        "data_prefix_sha256": data_hash, "world_size": evaluation.get("world_size"),
++                        "per_rank_batch_size": evaluation.get("per_rank_batch_size"),
++                        "allow_tf32_matmul": precision.get("allow_tf32_matmul"),
++                        "float32_matmul_precision": precision.get("float32_matmul_precision"),
++                        "torch_version": record.get("torch_version")}
++    if len(protocols) > 1:
++        raise ValueError("C re-scores mix data prefixes, batch/distributed layouts, or fp32 matmul settings")
++    return indexed
++
++
++def stats(values: list[float]) -> dict[str, Any]:
++    return {"n": len(values), "expected_n": len(SEEDS), "all_five_available": len(values) == len(SEEDS),
++            "mean": statistics.mean(values) if values else None,
++            "sample_sd": statistics.stdev(values) if len(values) > 1 else None}
++
++
++def formatted(result: dict[str, Any], scale: float = 100.0) -> str:
++    if not result["n"]:
++        return "—"
++    text = f"{scale * result['mean']:.3f}"
++    if result["sample_sd"] is not None:
++        text += f" ± {scale * result['sample_sd']:.3f}"
++    return text
++
++
++def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
++    fields = list(dict.fromkeys(key for row in rows for key in row))
++    with path.open("w", newline="") as handle:
++        writer = csv.DictWriter(handle, fieldnames=fields)
++        writer.writeheader()
++        writer.writerows(rows)
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--c-root", type=Path, nargs="*", default=[], help="C experiment/seed roots or explicit full-fp32 re-score files")
++    parser.add_argument("--baselines", type=Path, default=DEFAULT_BASELINES)
++    parser.add_argument("--out", type=Path, required=True)
++    args = parser.parse_args()
++    warnings: list[str] = []
++    try:
++        baseline_document, baseline_scores = load_baselines(args.baselines)
++        c_scores = load_c(args.c_root, warnings)
++        scores = {**baseline_scores, **c_scores}
++        coverage = []
++        for condition in ("B", "C", "D"):
++            for seed in SEEDS:
++                for step in STEPS:
++                    observation = scores.get((condition, seed, step))
++                    status = "scored" if observation else "pending_or_missing" if condition == "C" else "unavailable_in_source_artifacts"
++                    coverage.append({"condition": condition, "seed": seed, "step": step, "mode": "full_fp32",
++                                     "decoder": DECODER, "status": status, "accuracy": observation["accuracy"] if observation else None,
++                                     **({key: value for key, value in observation.items() if key not in ("condition", "seed", "step", "accuracy")} if observation else {})})
++        finals = [row for row in coverage if row["step"] == FINAL_STEP]
++        conditions = {condition: stats([row["accuracy"] for row in finals if row["condition"] == condition and row["accuracy"] is not None])
++                      for condition in ("B", "C", "D")}
++        pairs = []
++        for baseline in ("B", "D"):
++            for seed in SEEDS:
++                left, right = c_scores.get(("C", seed, FINAL_STEP)), baseline_scores.get((baseline, seed, FINAL_STEP))
++                available = left is not None and right is not None
++                pairs.append({"contrast": f"C-{baseline}", "seed": seed, "step": FINAL_STEP, "mode": "full_fp32",
++                              "status": "paired" if available else "pending_C_final_rescore", "c_accuracy": left["accuracy"] if left else None,
++                              "baseline_accuracy": right["accuracy"] if right else None,
++                              "accuracy_difference_pp": 100 * (left["accuracy"] - right["accuracy"]) if available else None})
++        paired_summary = {contrast: stats([row["accuracy_difference_pp"] for row in pairs if row["contrast"] == contrast and row["status"] == "paired"])
++                          for contrast in ("C-B", "C-D")}
++        c_checkpoint_summary = {str(step): stats([row["accuracy"] for row in coverage if row["condition"] == "C" and row["step"] == step and row["accuracy"] is not None])
++                                for step in STEPS}
++        limitations = list(baseline_document.get("limitations", [])) + [
++            "Only available re-scores contribute statistics; counts below 5 are explicitly provisional, and a missing C score is never replaced by zero or a previous checkpoint.",
++            "Matching full-fp32 labels, seeds, decoder, and test count does not prove identical undocumented B/D kernel or data-hash settings.",
++            "A/F legacy-bf16 results and fixed-softmax mixed-precision results are excluded. No threshold times are computed."
++        ]
++        summary = {"schema_version": 1, "mode": "full_fp32", "decoder": DECODER, "weights": "EMA", "test_count": 999,
++                   "accuracy_definition": ACCURACY_DEFINITION, "final_step": FINAL_STEP, "seeds": list(SEEDS),
++                   "allowed_checkpoint_steps": list(STEPS), "baseline_exact_curve_data_available": False,
++                   "baseline_available_steps": [FINAL_STEP], "standard_deviation": "sample (ddof=1)",
++                   "final_conditions": conditions, "paired_final_differences_pp": paired_summary,
++                   "c_checkpoint_summaries": c_checkpoint_summary, "source": baseline_document["source"],
++                   "baseline_file": str(args.baselines.resolve()), "baseline_file_sha256": sha256(args.baselines),
++                   "limitations": limitations, "warnings": warnings}
++        args.out.mkdir(parents=True, exist_ok=True)
++        write_csv(args.out / "final_per_seed.csv", finals)
++        write_csv(args.out / "paired_final.csv", pairs)
++        write_csv(args.out / "checkpoint_coverage.csv", coverage)
++        (args.out / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
++        lines = ["# C versus B/D: separate full-fp32 checkpoint comparison", "",
++                 f"EMA, `{DECODER}`, 999 puzzles, final update {FINAL_STEP:,}. All values below use full-fp32 forward and softmax.",
++                 "Means and sample SD use available matched seeds; any result with fewer than five seeds is provisional.", "",
++                 "| Condition | Final re-scores available | Accuracy (%) |", "|---|---:|---:|"]
++        for condition, result in conditions.items():
++            lines.append(f"| {condition} | {result['n']}/5 | {formatted(result)} |")
++        lines.extend(["", "| Contrast | Matched final seed pairs | C minus baseline (percentage points) |", "|---|---:|---:|"])
++        for contrast, result in paired_summary.items():
++            lines.append(f"| {contrast} | {result['n']}/5 | {formatted(result, 1.0)} |")
++        lines.extend(["", "Positive paired accuracy differences favor C. Exact B/D intermediate histories are absent from the downloaded artifacts, so comparisons are restricted to the final update.", "",
++                      "| C checkpoint update | Re-scores available | Accuracy (%) |", "|---|---:|---:|"])
++        for step, result in c_checkpoint_summary.items():
++            lines.append(f"| {step} | {result['n']}/5 | {formatted(result)} |")
++        lines.extend(["", "C intermediate scores describe checkpoint coverage only. No 1000-update threshold crossing or unsaved observation is inferred.", "",
++                      f"Source: [shared team report]({baseline_document['source']['report_url']}). Exact per-seed values and run IDs are in `final_per_seed.csv`; all missing checkpoint slots remain explicit in `checkpoint_coverage.csv`.", "",
++                      "B/D re-score device, batch/distributed layout, TF32 settings, and test-data hash are undocumented in the available source. Their training settings are preserved in the baseline JSON and do not establish retrospective re-score execution settings."])
++        if warnings:
++            lines.extend(["", "Input notes:", ""] + [f"- {warning}" for warning in warnings])
++        (args.out / "summary.md").write_text("\n".join(lines) + "\n")
++        print(f"Wrote 10 baseline finals and {len(c_scores)} C checkpoint observations to {args.out}; B/D exact intermediate curves unavailable.")
++        return 0
++    except (OSError, ValueError, TypeError, KeyError) as exc:
++        print(f"Full-fp32 comparison failed: {exc}", file=sys.stderr)
++        return 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/diagnose_sudoku_C_precision.sbatch b/scripts/diagnose_sudoku_C_precision.sbatch
+new file mode 100644
+index 0000000..d48a7f5
+--- /dev/null
++++ b/scripts/diagnose_sudoku_C_precision.sbatch
+@@ -0,0 +1,80 @@
++#!/bin/bash
++# Compare precision modes on two saved snapshots without touching training.
++# Submit only after both checkpoints exist.
++#SBATCH --job-name=puma_C_precision_check
++#SBATCH --partition=long,cscc-gpu-p
++#SBATCH --qos=gpu-debug-qos
++#SBATCH --account=cscc-users
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --gres=gpu:2
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=32G
++#SBATCH --time=00:20:00
++#SBATCH --exclude=gpu-02,gpu-05,gpu-51,gpu-52,gpu-54,gpu-55
++#SBATCH --output=runs/logs/%x_%j.out
++
++set -euo pipefail
++cd "${SLURM_SUBMIT_DIR:?submit from the repository root}"
++PY=${PY:-.venv/bin/python}
++EXP_DIR=${EXP_DIR:-runs/sudoku_C_20261022}
++export SEED=${SEED:-1000}
++export DIAGNOSTIC_DIR="runs/precision_diagnostic_C_${SLURM_JOB_ID}"
++export TQDM_MININTERVAL=60 PYTHONUNBUFFERED=1
++export DIAGNOSTIC_RUN="$EXP_DIR/C/seed$SEED"
++mkdir -p "$DIAGNOSTIC_DIR"
++for step in 10000 30000; do
++    test -s "$DIAGNOSTIC_RUN/ema_step=$step.pt"
++done
++echo "job=$SLURM_JOB_ID node=$(hostname) start=$(date -Is) seed=$SEED"
++for step in 10000 30000; do
++    mkdir -p "$DIAGNOSTIC_DIR/step$step"
++    for mode in legacy_bf16 bf16_fp32_softmax full_fp32; do
++        echo "[$(date -Is)] step=$step mode=$mode"
++        "$PY" -m torch.distributed.run --standalone --nproc_per_node=2 \
++            scripts/rescore_sudoku_checkpoint.py \
++            --checkpoint "$DIAGNOSTIC_RUN/ema_step=$step.pt" \
++            --mode "$mode" --expected-step "$step" --expected-seed "$SEED" \
++            --expected-world-size 2 --expected-test-count 999 \
++            --output "$DIAGNOSTIC_DIR/step$step/rescore_$mode.json" \
++            > "$DIAGNOSTIC_DIR/step$step/$mode.log" 2>&1
++    done
++done
++"$PY" - <<'PY'
++import json
++import os
++from pathlib import Path
++
++root = Path(os.environ["DIAGNOSTIC_DIR"])
++run = Path(os.environ["DIAGNOSTIC_RUN"])
++raw = (run / "metrics.jsonl").read_bytes()
++if raw and not raw.endswith(b"\n"):
++    raw = raw.rsplit(b"\n", 1)[0] if b"\n" in raw else b""
++records = [json.loads(line) for line in raw.splitlines()]
++rows = []
++for step in (10000, 30000):
++    original = [r for r in records if r.get("step") == step and "val_acc" in r]
++    if len(original) != 1:
++        raise RuntimeError(f"Expected one training evaluation at step {step}")
++    row = {"step": step, "training_legacy_bf16": original[0]["val_acc"]["top_k_unmasking_1"]}
++    hashes = set()
++    prefixes = set()
++    for mode in ("legacy_bf16", "bf16_fp32_softmax", "full_fp32"):
++        result = json.loads((root / f"step{step}" / f"rescore_{mode}.json").read_text())
++        if result["step"] != step or result["mode"] != mode:
++            raise RuntimeError("Diagnostic output metadata does not match request")
++        hashes.add(result["checkpoint_sha256"])
++        prefixes.add(result["evaluation"]["data_prefix_sha256"])
++        row[mode] = result["metrics"]["top_k_unmasking_1"]
++    if len(hashes) != 1 or len(prefixes) != 1:
++        raise RuntimeError("Precision modes did not use the same checkpoint and data")
++    row["legacy_reproduced_exactly"] = row["legacy_bf16"] == row["training_legacy_bf16"]
++    rows.append(row)
++summary = {"seed": int(os.environ["SEED"]),
++           "rows": rows, "source_run": str(run), "diagnostic_dir": str(root)}
++(root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
++print(json.dumps(summary, indent=2))
++if not all(row["legacy_reproduced_exactly"] for row in rows):
++    raise RuntimeError("Legacy evaluation did not reproduce; inspect batch/kernel context before attribution")
++PY
++date -Is > "$DIAGNOSTIC_DIR/DONE"
+diff --git a/scripts/export_sudoku_results.py b/scripts/export_sudoku_results.py
+index f6beb09..de2065f 100644
+--- a/scripts/export_sudoku_results.py
++++ b/scripts/export_sudoku_results.py
+@@ -20,6 +20,7 @@ import statistics
+ 
+ CONDITION_NAMES = {
+     "A": "random masking",
++    "C": "reuse with independent masks",
+     "E": "confidence progression",
+     "F": "Gt-Margin progression",
+     "P": "PUMA reference",
+@@ -133,7 +134,7 @@ def main():
+     lines = [f"# Sudoku results summary",
+              "",
+              f"Generated by `scripts/export_sudoku_results.py` from {', '.join(f'`{d}`' for d in exp_dirs)}.",
+-             f"Accuracy is exact-grid accuracy of the `{args.decoder}` decoder; mean ± std over seeds.",
++             f"Accuracy is valid-grid accuracy preserving givens for the `{args.decoder}` decoder; mean ± sample SD over seeds.",
+              "A target counts as reached at the first of two consecutive evals at or above it.",
+              "",
+              "| Condition | Done runs | Final acc. (%) | Best acc. (%) | Final val loss | Train min | Updates to 50% | Updates to 75% | Updates to 90% |",
+diff --git a/scripts/finalize_sudoku_C.sbatch b/scripts/finalize_sudoku_C.sbatch
+new file mode 100644
+index 0000000..1bee971
+--- /dev/null
++++ b/scripts/finalize_sudoku_C.sbatch
+@@ -0,0 +1,53 @@
++#!/bin/bash
++# Submit after the FP32 curve job (which itself depends on the training array).
++# Failed or missing runs remain explicit in the exported analysis.
++#SBATCH --job-name=puma_C_analysis
++#SBATCH --partition=cscc-cpu-p
++#SBATCH --qos=cscc-cpu-qos
++#SBATCH --account=cscc-users
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --cpus-per-task=2
++#SBATCH --mem=8G
++#SBATCH --time=00:20:00
++#SBATCH --output=runs/logs/%x_%j.out
++
++set -euo pipefail
++cd "${SLURM_SUBMIT_DIR:?submit from the repository root}"
++PY=${PY:-.venv/bin/python}
++EXP_DIR=${EXP_DIR:-runs/sudoku_C_20261022}
++export MPLBACKEND=Agg
++"$PY" scripts/export_sudoku_results.py "$EXP_DIR" --out results/sudoku_C
++extra=()
++if [[ -d "$EXP_DIR" ]]; then
++    extra=(--rescore "$EXP_DIR")
++fi
++"$PY" scripts/compare_sudoku_c.py --c-root "$EXP_DIR" "${extra[@]}" --out results/sudoku_C_comparison
++"$PY" scripts/plot_sudoku_c.py --input results/sudoku_C_comparison
++"$PY" - <<'PY'
++import json
++import os
++from pathlib import Path
++import shutil
++
++source = Path(os.environ.get("EXP_DIR", "runs/sudoku_C_20261022"))
++destination = Path("results/sudoku_C/raw") / source.name
++for seed in (1000, 2000, 3000, 4000, 5000):
++    run = source / "C" / f"seed{seed}"
++    if not run.is_dir():
++        continue
++    target = destination / "C" / f"seed{seed}"
++    target.mkdir(parents=True, exist_ok=True)
++    for path in list(run.glob("rescore_*.json")) + [run / "DONE", run / "RESCORE_DONE", run / "CURVE_RESCORE_DONE"]:
++        if path.is_file():
++            shutil.copy2(path, target / path.name)
++    legacy = run / "rescore_legacy_bf16.json"
++    if legacy.exists():
++        score = json.loads(legacy.read_text())["metrics"]["top_k_unmasking_1"]
++        evaluations = [json.loads(line) for line in (run / "metrics.jsonl").read_text().splitlines()]
++        final = [row for row in evaluations if row.get("step") == 53570 and "val_acc" in row]
++        if final and score != final[0]["val_acc"]["top_k_unmasking_1"]:
++            raise RuntimeError(f"Legacy checkpoint re-score differs from training evaluation for seed {seed}")
++summary = json.loads(Path("results/sudoku_C_comparison/summary.json").read_text())
++print(json.dumps(summary["conditions"], indent=2))
++PY
+diff --git a/scripts/plot_sudoku_c.py b/scripts/plot_sudoku_c.py
+new file mode 100644
+index 0000000..a5b86a1
+--- /dev/null
++++ b/scripts/plot_sudoku_c.py
+@@ -0,0 +1,417 @@
++"""Plot compare_sudoku_c.py outputs without combining evaluation precisions.
++
++Verified against Matplotlib 3.11.2 Axes.fill_between, Axes.errorbar, and
++Figure.savefig documentation. Missing scheduled observations remain NaN gaps.
++Final C checkpoint re-scores, when available, receive a separate precision plot.
++
++Usage:
++    python scripts/plot_sudoku_c.py --input results/sudoku_C_comparison
++"""
++from __future__ import annotations
++
++import argparse
++import csv
++import json
++import math
++from pathlib import Path
++import sys
++from typing import Any
++
++import matplotlib
++
++matplotlib.use("Agg")
++import matplotlib.pyplot as plt
++from matplotlib.lines import Line2D
++from matplotlib.patches import Patch
++import numpy as np
++
++CONDITIONS = ("A", "C", "F")
++NAMES = {"A": "Random masking", "C": "Reuse, independent masks", "F": "Gt-Margin progression"}
++DEFAULT_SEEDS = (1000, 2000, 3000, 4000, 5000)
++COLORS = ("#4477AA", "#66AACC", "#228833", "#AA8822", "#CC6677")
++MARKERS = ("o", "s", "^", "D", "v")
++PRECISION_MODES = ("legacy_bf16", "bf16_fp32_softmax", "full_fp32")
++PRECISION_LABELS = ("Legacy bf16\nforward + softmax", "bf16 forward\nfp32 softmax", "Full fp32\nforward + softmax")
++PRECISION_FINAL_STEP = 53570
++CHECKPOINT_STEPS = (10000, 20000, 30000, 40000, 50000, PRECISION_FINAL_STEP)
++
++
++def read_csv(path: Path, required: set[str]) -> list[dict[str, str]]:
++    with path.open(newline="") as handle:
++        reader = csv.DictReader(handle)
++        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
++            raise ValueError(f"{path}: missing columns {sorted(required - set(reader.fieldnames or []))}")
++        return list(reader)
++
++
++def accuracy(value: str, context: str) -> float:
++    result = float(value)
++    if not math.isfinite(result) or not 0.0 <= result <= 1.0:
++        raise ValueError(f"{context}: accuracy must be finite and in [0, 1]")
++    return 100.0 * result
++
++
++def load_inputs(directory: Path, seeds: list[int], budget: int, interval: int
++                ) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, dict[int, float]]]:
++    steps = np.array(sorted(set(range(interval, budget + 1, interval)) | {budget}), dtype=int)
++    step_indices = {int(step): index for index, step in enumerate(steps)}
++    seed_indices = {seed: index for index, seed in enumerate(seeds)}
++    curves = {condition: np.full((len(seeds), len(steps)), np.nan) for condition in CONDITIONS}
++    finals: dict[str, dict[int, float]] = {condition: {} for condition in CONDITIONS}
++    observations = read_csv(directory / "evals.csv", {"condition", "seed", "precision", "step", "accuracy"})
++    for row in observations:
++        condition, seed, step = row["condition"], int(row["seed"]), int(row["step"])
++        if condition not in CONDITIONS:
++            continue
++        if seed not in seed_indices or step not in step_indices:
++            raise ValueError(f"Unexpected seed or evaluation step in evals.csv: {condition}:{seed}:{step}")
++        if row["precision"] != "legacy_bf16":
++            raise ValueError("Learning curves accept legacy_bf16 only; do not mix checkpoint re-scores")
++        position = (seed_indices[seed], step_indices[step])
++        if np.isfinite(curves[condition][position]):
++            raise ValueError(f"Duplicate evaluation: {condition}:{seed}:{step}")
++        curves[condition][position] = accuracy(row["accuracy"], f"{condition}:{seed}:{step}")
++    runs = read_csv(directory / "per_seed.csv", {"condition", "seed", "precision", "is_complete", "status", "last_eval_step", "final_accuracy"})
++    seen: set[tuple[str, int]] = set()
++    for row in runs:
++        condition, seed = row["condition"], int(row["seed"])
++        if condition not in CONDITIONS:
++            continue
++        if seed not in seed_indices:
++            raise ValueError(f"Unexpected per-seed record: {condition}:{seed}")
++        if (condition, seed) in seen:
++            raise ValueError(f"Duplicate per-seed record: {condition}:{seed}")
++        seen.add((condition, seed))
++        if row["precision"] != "legacy_bf16":
++            raise ValueError("Final comparisons accept legacy_bf16 only")
++        if row["is_complete"].lower() == "true":
++            if row["status"] != "complete" or int(row["last_eval_step"]) != budget:
++                raise ValueError(f"Completion status or final budget mismatch: {condition}:{seed}")
++            score = accuracy(row["final_accuracy"], f"{condition}:{seed}:final")
++            curve_score = curves[condition][seed_indices[seed], step_indices[budget]]
++            if not np.isfinite(curve_score) or not math.isclose(score, float(curve_score), abs_tol=1e-9):
++                raise ValueError(f"Final score disagrees with the budget evaluation: {condition}:{seed}")
++            finals[condition][seed] = score
++        elif row["final_accuracy"]:
++            raise ValueError(f"An incomplete run is labeled with final accuracy: {condition}:{seed}")
++    return steps, curves, finals
++
++
++def seed_legend(seeds: list[int], points: bool) -> list[Any]:
++    return [Line2D([0], [0], color=COLORS[index], marker=MARKERS[index] if points else None,
++                   linestyle="none" if points else "-", linewidth=1.1, markersize=5,
++                   label=f"Seed {seed}") for index, seed in enumerate(seeds)]
++
++
++def load_precision_scores(directory: Path, seeds: list[int], test_count: int,
++                          decoder: str) -> dict[str, dict[int, float]]:
++    scores: dict[str, dict[int, float]] = {mode: {} for mode in PRECISION_MODES}
++    path = directory / "precision_rescores.csv"
++    if not path.is_file():
++        return scores
++    rows = read_csv(path, {"condition", "seed", "step", "precision", "accuracy"})
++    checkpoint_hashes: dict[int, str] = {}
++    data_hashes: set[str] = set()
++    for row in rows:
++        if row["condition"] != "C" or int(row["step"]) != PRECISION_FINAL_STEP:
++            continue
++        seed, mode = int(row["seed"]), row["precision"]
++        if seed not in seeds or mode not in PRECISION_MODES:
++            raise ValueError(f"Unexpected final C precision observation: {seed}:{mode}")
++        if seed in scores[mode]:
++            raise ValueError(f"Duplicate final C precision observation: {seed}:{mode}")
++        if row.get("is_final_budget_checkpoint", "").lower() != "true":
++            raise ValueError(f"C precision observation is not marked as a final checkpoint: {seed}:{mode}")
++        if row.get("decoder") != decoder or int(row.get("test_count", "0")) != test_count:
++            raise ValueError(f"C precision observation has a different decoder or test count: {seed}:{mode}")
++        checkpoint_hash = row.get("checkpoint_sha256", "")
++        data_hash = row.get("data_prefix_sha256", "")
++        if len(checkpoint_hash) != 64 or len(data_hash) != 64:
++            raise ValueError(f"C precision observation lacks checkpoint/data SHA256 provenance: {seed}:{mode}")
++        if seed in checkpoint_hashes and checkpoint_hashes[seed] != checkpoint_hash:
++            raise ValueError(f"Precision modes use different final checkpoints for C seed {seed}")
++        checkpoint_hashes[seed] = checkpoint_hash
++        data_hashes.add(data_hash)
++        scores[mode][seed] = accuracy(row["accuracy"], f"C:{seed}:{mode}")
++    if len(data_hashes) > 1:
++        raise ValueError("C precision observations use different test-data prefixes")
++    return scores
++
++
++def save(figure: Any, output: Path, name: str, dpi: int) -> None:
++    for extension in ("png", "pdf"):
++        figure.savefig(output / f"{name}.{extension}", dpi=dpi, bbox_inches="tight", facecolor="white")
++    plt.close(figure)
++
++
++def load_checkpoint_scores(directory: Path, seeds: list[int], test_count: int,
++                           decoder: str) -> dict[tuple[int, int], float]:
++    path = directory / "precision_rescores.csv"
++    if not path.is_file():
++        return {}
++    scores: dict[tuple[int, int], float] = {}
++    data_hashes: set[str] = set()
++    for row in read_csv(path, {"condition", "seed", "step", "precision", "accuracy"}):
++        if row["condition"] != "C" or row["precision"] != "full_fp32":
++            continue
++        seed, step = int(row["seed"]), int(row["step"])
++        if seed not in seeds or step not in CHECKPOINT_STEPS:
++            raise ValueError(f"Unexpected full-fp32 C checkpoint: {seed}:{step}")
++        if (seed, step) in scores:
++            raise ValueError(f"Duplicate full-fp32 C checkpoint: {seed}:{step}")
++        if row.get("decoder") != decoder or int(row.get("test_count", "0")) != test_count:
++            raise ValueError(f"Full-fp32 C checkpoint has a different decoder or test count: {seed}:{step}")
++        if row.get("model_forward") != "float32" or row.get("softmax") != "float32":
++            raise ValueError(f"C checkpoint is not full-fp32 forward and softmax: {seed}:{step}")
++        data_hash = row.get("data_prefix_sha256", "")
++        if len(data_hash) != 64:
++            raise ValueError(f"Full-fp32 C checkpoint lacks test-data SHA256: {seed}:{step}")
++        data_hashes.add(data_hash)
++        scores[(seed, step)] = accuracy(row["accuracy"], f"C:{seed}:{step}:full_fp32")
++    if len(data_hashes) > 1:
++        raise ValueError("Full-fp32 C checkpoint scores use different test-data prefixes")
++    return scores
++
++
++def plot_curves(steps: np.ndarray, curves: dict[str, np.ndarray], finals: dict[str, dict[int, float]],
++                seeds: list[int], budget: int, test_count: int, decoder: str, output: Path, dpi: int) -> None:
++    figure, axes = plt.subplots(1, 3, figsize=(13.5, 4.4), sharex=True, sharey=True)
++    x = steps / 1000.0
++    for axis, condition in zip(axes, CONDITIONS):
++        matrix = curves[condition]
++        for index, seed in enumerate(seeds):
++            axis.plot(x, matrix[index], color=COLORS[index], linewidth=0.85, alpha=0.70,
++                      marker=".", markersize=1.5, zorder=2)
++        complete_columns = np.isfinite(matrix).all(axis=0)
++        mean = np.full(len(steps), np.nan)
++        deviation = np.full(len(steps), np.nan)
++        if complete_columns.any():
++            mean[complete_columns] = np.mean(matrix[:, complete_columns], axis=0)
++            deviation[complete_columns] = np.std(matrix[:, complete_columns], axis=0, ddof=1)
++            axis.fill_between(x, mean - deviation, mean + deviation, where=complete_columns,
++                              color="#111111", alpha=0.11, linewidth=0, interpolate=False, zorder=1)
++            axis.plot(x, mean, color="#111111", linewidth=2.0, marker=".", markersize=2.5, zorder=3)
++        evaluated = int(np.isfinite(matrix).any(axis=1).sum())
++        axis.set_title(f"{condition} · {NAMES[condition]}", fontsize=11, pad=12)
++        axis.text(0.03, 0.04, f"Evaluated {evaluated}/5 · completed {len(finals[condition])}/5",
++                  transform=axis.transAxes, fontsize=8, color="#555555",
++                  bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 2})
++        if evaluated == 0:
++            axis.text(0.5, 0.5, "Results pending", transform=axis.transAxes,
++                      ha="center", va="center", fontsize=12, color="#777777")
++        axis.set_xlim(0, budget / 1000.0)
++        axis.set_ylim(0, 100)
++        axis.set_xlabel("Optimizer updates (thousands)")
++        axis.set_yticks([0, 25, 50, 75, 100])
++        axis.grid(axis="y", alpha=0.22, linewidth=0.6)
++        axis.spines[["top", "right"]].set_visible(False)
++    axes[0].set_ylabel("Valid-grid accuracy (%)")
++    figure.suptitle(f"Sudoku learning curves | legacy bf16 | {test_count:,} puzzles", fontsize=13, y=1.02)
++    handles = seed_legend(seeds, points=False)
++    handles.extend([Line2D([0], [0], color="#111111", linewidth=2, label="Mean: all 5 seeds"),
++                    Patch(facecolor="#111111", alpha=0.11, label="±1 sample SD")])
++    figure.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.04), ncol=7, frameon=False, fontsize=8)
++    figure.text(0.5, -0.085, f"Decoder: {decoder}. No smoothing or imputation; mean and band require all five observations at that update.",
++                ha="center", fontsize=8, color="#555555")
++    figure.subplots_adjust(left=0.065, right=0.99, bottom=0.18, top=0.84, wspace=0.12)
++    save(figure, output, "learning_curves", dpi)
++
++
++def plot_finals(finals: dict[str, dict[int, float]], seeds: list[int], budget: int,
++                test_count: int, decoder: str, output: Path, dpi: int) -> None:
++    figure, axis = plt.subplots(figsize=(8.4, 5.0))
++    offsets = np.linspace(-0.18, 0.18, len(seeds))
++    labels = []
++    for position, condition in enumerate(CONDITIONS):
++        scores = finals[condition]
++        labels.append(f"{condition}: {NAMES[condition]}\nn = {len(scores)}/5 completed")
++        for index, seed in enumerate(seeds):
++            if seed in scores:
++                axis.scatter(position + offsets[index], scores[seed], color=COLORS[index],
++                             marker=MARKERS[index], s=45, edgecolors="white", linewidths=0.6, zorder=3)
++        if scores:
++            values = np.array(list(scores.values()), dtype=float)
++            mean = float(np.mean(values))
++            deviation = float(np.std(values, ddof=1)) if len(values) > 1 else None
++            axis.errorbar(position, mean, yerr=deviation, fmt="D", color="#111111", ecolor="#111111",
++                          markersize=6, capsize=6, linewidth=1.7, zorder=4)
++            text = f"{mean:.2f} ± {deviation:.2f}%" if deviation is not None else f"{mean:.2f}% (SD unavailable)"
++            axis.text(position, 12, text, ha="center", va="center", fontsize=10, color="#333333")
++        else:
++            axis.text(position, 48, "No completed runs", ha="center", va="center", color="#777777", fontsize=10)
++    axis.set_ylim(0, 100)
++    axis.set_xlim(-0.55, 2.55)
++    axis.set_xticks(range(len(CONDITIONS)), labels, fontsize=9)
++    axis.set_ylabel("Valid-grid accuracy (%)")
++    axis.set_yticks([0, 25, 50, 75, 100])
++    axis.grid(axis="y", alpha=0.22, linewidth=0.6)
++    axis.spines[["top", "right"]].set_visible(False)
++    axis.set_title(f"Final Sudoku accuracy at {budget:,} updates\nLegacy bf16 | {test_count:,} puzzles | {decoder}", fontsize=12, pad=16)
++    handles = seed_legend(seeds, points=True)
++    handles.append(Line2D([0], [0], color="#111111", marker="D", linestyle="none", markersize=6,
++                          label="Completed-seed mean ± SD"))
++    figure.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.04), ncol=3, frameon=False, fontsize=8)
++    figure.text(0.5, -0.085, "Only verified completed runs are shown. Means with fewer than five seeds are provisional; SD uses ddof=1.",
++                ha="center", fontsize=8, color="#555555")
++    figure.subplots_adjust(left=0.10, right=0.98, bottom=0.20, top=0.82)
++    save(figure, output, "final_accuracy", dpi)
++
++
++def plot_precision(scores: dict[str, dict[int, float]], seeds: list[int], test_count: int,
++                   decoder: str, output: Path, dpi: int) -> None:
++    figure, axis = plt.subplots(figsize=(8.8, 5.2))
++    x = np.arange(len(PRECISION_MODES), dtype=float)
++    plotted_seeds = []
++    for index, seed in enumerate(seeds):
++        values = np.array([scores[mode].get(seed, np.nan) for mode in PRECISION_MODES], dtype=float)
++        if not np.isfinite(values).any():
++            continue
++        plotted_seeds.append(seed)
++        axis.plot(x, values, color=COLORS[index], marker=MARKERS[index], linewidth=1.35,
++                  markersize=6, alpha=0.9, label=f"Seed {seed}", zorder=3)
++    all_modes_complete = all(set(scores[mode]) == set(seeds) for mode in PRECISION_MODES)
++    if all_modes_complete:
++        matrix = np.array([[scores[mode][seed] for mode in PRECISION_MODES] for seed in seeds], dtype=float)
++        mean = np.mean(matrix, axis=0)
++        deviation = np.std(matrix, axis=0, ddof=1)
++        axis.errorbar(x, mean, yerr=deviation, fmt="D-", color="#111111", ecolor="#111111",
++                      markersize=7, linewidth=2, capsize=6, label="All-five-seed mean ± sample SD", zorder=4)
++    else:
++        axis.text(0.02, 0.045, "Five-seed aggregates pending", transform=axis.transAxes,
++                  color="#666666", fontsize=9)
++    labels = [f"{label}\nn = {len(scores[mode])}/5" for mode, label in zip(PRECISION_MODES, PRECISION_LABELS)]
++    axis.set_xticks(x, labels, fontsize=10)
++    axis.set_xlim(-0.30, 2.30)
++    axis.set_ylim(0, 100)
++    axis.set_yticks([0, 25, 50, 75, 100])
++    axis.set_ylabel("Valid-grid accuracy (%)")
++    axis.grid(axis="y", alpha=0.22, linewidth=0.6)
++    axis.spines[["top", "right"]].set_visible(False)
++    axis.set_title(f"C: sensitivity to evaluation precision\nFinal EMA at {PRECISION_FINAL_STEP:,} updates | {test_count:,} puzzles | {decoder}",
++                   fontsize=12, pad=16)
++    handles, legend_labels = axis.get_legend_handles_labels()
++    figure.legend(handles, legend_labels, loc="lower center", bbox_to_anchor=(0.5, -0.04),
++                  ncol=min(3, len(handles)), frameon=False, fontsize=9)
++    footer = "Each line follows the same seed and checkpoint across modes; missing observations break the line."
++    if all_modes_complete:
++        footer += "\nEach mean and sample SD uses all five seeds."
++    else:
++        pending = [str(seed) for seed in seeds if seed not in plotted_seeds]
++        footer += "\nMean ± SD will appear only after all three modes contain all five seeds."
++        if pending:
++            footer += " Pending seeds: " + ", ".join(pending) + "."
++    figure.text(0.5, -0.105, footer, ha="center", fontsize=8, color="#555555")
++    figure.subplots_adjust(left=0.10, right=0.98, bottom=0.24, top=0.81)
++    save(figure, output, "c_precision_comparison", dpi)
++
++
++def plot_checkpoint_precision(steps: np.ndarray, legacy_curve: np.ndarray,
++                              fp32_scores: dict[tuple[int, int], float], seeds: list[int],
++                              test_count: int, decoder: str, output: Path, dpi: int) -> None:
++    legacy = np.full((len(seeds), len(CHECKPOINT_STEPS)), np.nan)
++    full_fp32 = np.full_like(legacy, np.nan)
++    positions = {int(step): index for index, step in enumerate(steps)}
++    for column, step in enumerate(CHECKPOINT_STEPS):
++        if step in positions:
++            legacy[:, column] = legacy_curve[:, positions[step]]
++        for row, seed in enumerate(seeds):
++            full_fp32[row, column] = fp32_scores.get((seed, step), np.nan)
++    x = np.array(CHECKPOINT_STEPS, dtype=float) / 1000.0
++    styles = ((legacy, "#4477AA", "o", "Legacy bf16"),
++              (full_fp32, "#CC6677", "s", "Full fp32"))
++    figure, axes = plt.subplots(2, 3, figsize=(13.5, 7.1), sharex=True, sharey=True)
++    panels = axes.flat
++    for row, seed in enumerate(seeds):
++        axis = panels[row]
++        for matrix, color, marker, label in styles:
++            axis.plot(x, matrix[row], color=color, marker=marker, linewidth=1.35, markersize=4,
++                      label=label, zorder=3)
++        available = int(np.isfinite(full_fp32[row]).sum())
++        axis.set_title(f"Seed {seed} · full fp32 {available}/6 checkpoints", fontsize=10, pad=10)
++    mean_axis = panels[5]
++    for matrix, color, marker, label in styles:
++        complete = np.isfinite(matrix).all(axis=0)
++        mean = np.full(len(CHECKPOINT_STEPS), np.nan)
++        deviation = np.full_like(mean, np.nan)
++        if complete.any():
++            mean[complete] = np.mean(matrix[:, complete], axis=0)
++            deviation[complete] = np.std(matrix[:, complete], axis=0, ddof=1)
++            mean_axis.fill_between(x, mean - deviation, mean + deviation, where=complete,
++                                   color=color, alpha=0.15, linewidth=0, interpolate=False)
++            mean_axis.errorbar(x[complete], mean[complete], yerr=deviation[complete], fmt="none",
++                               ecolor=color, elinewidth=1, capsize=3, zorder=2)
++            mean_axis.plot(x, mean, color=color, marker=marker, linewidth=2, markersize=4, zorder=3)
++    mean_axis.set_title("All-five-seed mean ± sample SD", fontsize=10, pad=10)
++    if not np.isfinite(full_fp32).all(axis=0).any():
++        mean_axis.text(0.03, 0.05, "Full-fp32 aggregate pending", transform=mean_axis.transAxes,
++                       fontsize=8, color="#666666")
++    for axis in axes.flat:
++        axis.set_xlim(0, 55)
++        axis.set_ylim(0, 100)
++        axis.set_yticks([0, 25, 50, 75, 100])
++        axis.grid(axis="y", alpha=0.22, linewidth=0.6)
++        axis.spines[["top", "right"]].set_visible(False)
++    for axis in axes[1]:
++        axis.set_xlabel("Optimizer updates (thousands)")
++    for axis in axes[:, 0]:
++        axis.set_ylabel("Valid-grid accuracy (%)")
++    figure.suptitle(f"C: evaluation precision at saved checkpoints\nEMA | {test_count:,} puzzles | {decoder}", fontsize=13, y=1.01)
++    handles = [Line2D([0], [0], color=color, marker=marker, linewidth=1.35, markersize=4, label=label)
++               for _, color, marker, label in styles]
++    handles.append(Patch(facecolor="#777777", alpha=0.15, label="±1 sample SD: mean panel only"))
++    figure.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.015), ncol=3,
++                  frameon=False, fontsize=9)
++    figure.text(0.5, -0.055,
++                "Only updates 10k, 20k, 30k, 40k, 50k, and 53,570 are shown. Missing observations remain gaps.\n"
++                "Each aggregate requires all five seeds at that checkpoint; no threshold times are inferred.",
++                ha="center", fontsize=8, color="#555555")
++    figure.subplots_adjust(left=0.065, right=0.99, bottom=0.12, top=0.85, hspace=0.28, wspace=0.12)
++    save(figure, output, "c_checkpoint_precision", dpi)
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--input", type=Path, required=True, help="Output directory from compare_sudoku_c.py")
++    parser.add_argument("--out", type=Path, help="Plot destination; defaults to INPUT/plots")
++    parser.add_argument("--budget", type=int, help="Defaults to summary.json budget, otherwise 53570")
++    parser.add_argument("--eval-interval", type=int, help="Defaults to summary.json interval, otherwise 1000")
++    parser.add_argument("--test-count", type=int, default=999)
++    parser.add_argument("--dpi", type=int, default=180)
++    args = parser.parse_args()
++    try:
++        summary_path = args.input / "summary.json"
++        summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
++        if not isinstance(summary, dict) or summary.get("training_curve_precision", "legacy_bf16") != "legacy_bf16":
++            raise ValueError("Input summary must describe legacy_bf16 training curves")
++        seeds = list(summary.get("seeds", DEFAULT_SEEDS))
++        if len(seeds) != 5 or len(set(seeds)) != 5 or any(not isinstance(seed, int) or isinstance(seed, bool) or seed < 0 for seed in seeds):
++            raise ValueError("This plot requires exactly five distinct nonnegative seed IDs")
++        budget = args.budget if args.budget is not None else int(summary.get("budget", 53570))
++        interval = args.eval_interval if args.eval_interval is not None else int(summary.get("evaluation_interval", 1000))
++        if min(budget, interval, args.test_count, args.dpi) <= 0:
++            raise ValueError("Budget, interval, test count, and DPI must be positive")
++        decoder = str(summary.get("decoder", "top_k_unmasking_1"))
++        steps, curves, finals = load_inputs(args.input, seeds, budget, interval)
++        precision_scores = load_precision_scores(args.input, seeds, args.test_count, decoder)
++        checkpoint_scores = load_checkpoint_scores(args.input, seeds, args.test_count, decoder)
++        output = args.out if args.out is not None else args.input / "plots"
++        output.mkdir(parents=True, exist_ok=True)
++        plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "pdf.fonttype": 42,
++                             "axes.labelcolor": "#333333", "xtick.color": "#555555", "ytick.color": "#555555"})
++        plot_curves(steps, curves, finals, seeds, budget, args.test_count, decoder, output, args.dpi)
++        plot_finals(finals, seeds, budget, args.test_count, decoder, output, args.dpi)
++        plot_checkpoint_precision(steps, curves["C"], checkpoint_scores, seeds, args.test_count, decoder, output, args.dpi)
++        names = ["learning_curves.png/.pdf", "final_accuracy.png/.pdf", "c_checkpoint_precision.png/.pdf"]
++        if any(precision_scores[mode] for mode in PRECISION_MODES):
++            plot_precision(precision_scores, seeds, args.test_count, decoder, output, args.dpi)
++            names.append("c_precision_comparison.png/.pdf")
++        print(f"Saved {', '.join(names)} to {output}")
++        return 0
++    except (OSError, ValueError, TypeError, KeyError) as exc:
++        plt.close("all")
++        print(f"Plot generation failed: {exc}", file=sys.stderr)
++        return 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/rescore_sudoku_C_curve.sbatch b/scripts/rescore_sudoku_C_curve.sbatch
+new file mode 100644
+index 0000000..1465394
+--- /dev/null
++++ b/scripts/rescore_sudoku_C_curve.sbatch
+@@ -0,0 +1,207 @@
++#!/bin/bash
++# Submit from the repository root after the complete five-seed training array:
++# EXP_DIR=runs/sudoku_C_20261022 sbatch --dependency=afterany:335458 scripts/rescore_sudoku_C_curve.sbatch
++# Scores the five saved intermediate EMA checkpoints; the array owns the final score.
++# Corrected curves have six checkpoint observations, not 1,000-update resolution.
++#SBATCH --job-name=puma_C_fp32_curve
++#SBATCH --partition=cscc-gpu-p
++#SBATCH --qos=cscc-gpu-qos
++#SBATCH --account=cscc-users
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --gres=gpu:2
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=32G
++#SBATCH --time=02:00:00
++#SBATCH --exclude=gpu-02,gpu-05,gpu-51,gpu-52,gpu-54,gpu-55
++#SBATCH --output=runs/logs/%x_%j.out
++
++set -uo pipefail
++cd "${SLURM_SUBMIT_DIR:?submit from the repository root}" || exit 1
++PY=${PY:-.venv/bin/python}
++EXP_DIR=${EXP_DIR:-runs/sudoku_C_20261022}
++export TQDM_MININTERVAL=60 PYTHONUNBUFFERED=1
++
++if ! command -v "$PY" >/dev/null 2>&1; then
++    echo "Python interpreter is unavailable: $PY" >&2
++    exit 1
++fi
++echo "job=${SLURM_JOB_ID:-manual} node=$(hostname) start=$(date -Is) experiment=$EXP_DIR"
++echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-<unset>}"
++if ! "$PY" - <<'PY'
++import torch
++
++count = torch.cuda.device_count()
++if count != 2:
++    raise RuntimeError(f"Expected two allocated GPUs, found {count}")
++for index in range(count):
++    matrix = torch.randn(1024, 1024, device=f"cuda:{index}", dtype=torch.float32)
++    value = (matrix @ matrix).sum().item()
++    print(f"preflight cuda:{index} {torch.cuda.get_device_name(index)} sum={value:.6e}")
++PY
++then
++    echo "CUDA preflight failed" >&2
++    exit 1
++fi
++
++validate_result() {
++    "$PY" - "$@" <<'PY'
++import hashlib
++import json
++import math
++from pathlib import Path
++import sys
++
++import numpy as np
++
++
++def digest_file(path):
++    digest = hashlib.sha256()
++    with path.open("rb") as handle:
++        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
++            digest.update(chunk)
++    return digest.hexdigest()
++
++
++def require(condition, message):
++    if not condition:
++        raise ValueError(message)
++
++
++result_path, checkpoint_path = (Path(value) for value in sys.argv[1:3])
++seed, step = (int(value) for value in sys.argv[3:5])
++try:
++    record = json.loads(result_path.read_text())
++    require(isinstance(record, dict), "result must be a JSON object")
++    for key, expected in {
++        "schema_version": 1,
++        "type": "checkpoint_rescore",
++        "condition": "C",
++        "seed": seed,
++        "step": step,
++        "mode": "full_fp32",
++    }.items():
++        require(record.get(key) == expected, f"unexpected {key}: {record.get(key)!r}")
++    require(record.get("is_ema_snapshot") is True, "result is not from EMA weights")
++    evaluation = record["evaluation"]
++    require(evaluation["world_size"] == 2, "world size must be two")
++    require(evaluation["test_count"] == 999, "test count must be 999")
++    require(evaluation["per_rank_batch_size"] == 16, "evaluation batch size must be 16 per rank")
++    require(evaluation["accuracy_definition"] == "valid_completed_grid_preserving_givens", "wrong accuracy definition")
++    sampling = evaluation["sampling"]
++    require(sampling["temperature"] == 0.0, "decoding must be greedy")
++    require("top_k" in sampling["confidence"] and 1 in sampling["unmasking_num"], "missing primary decoder")
++    score = record["metrics"]["top_k_unmasking_1"]
++    require(isinstance(score, (int, float)) and not isinstance(score, bool), "accuracy must be numeric")
++    require(math.isfinite(score) and 0.0 <= score <= 1.0, "invalid accuracy")
++    require(abs(score * 999 - round(score * 999)) < 1e-7, "accuracy is inconsistent with 999 puzzles")
++    precision = record["precision"]
++    require(precision["model_forward"] == "float32" and precision["softmax"] == "float32", "wrong evaluation precision")
++    require(precision["allow_tf32_matmul"] is False, "TF32 must be disabled")
++    require(precision["float32_matmul_precision"] == "highest", "FP32 matmul precision must be highest")
++    require(checkpoint_path.is_file(), f"missing checkpoint: {checkpoint_path}")
++    require(Path(record["checkpoint"]).resolve() == checkpoint_path.resolve(), "checkpoint path differs")
++    require(record["checkpoint_sha256"] == digest_file(checkpoint_path), "checkpoint SHA256 differs")
++    for source in (
++        "sampling.py", "eval/sudoku_eval.py", "model/transformer.py",
++        "scripts/rescore_sudoku_checkpoint.py",
++    ):
++        require(record["source_sha256"][source] == digest_file(Path(source)), f"source SHA256 differs: {source}")
++    raw = np.load(evaluation["data_file"], mmap_mode="r", allow_pickle=False)
++    require(raw.ndim == 2 and raw.shape[1] == 162, "invalid Sudoku cache shape")
++    require(int(len(raw) * float(evaluation["validation_ratio"])) == 999, "validation subset differs")
++    prefix_digest = hashlib.sha256(raw[:999].tobytes(order="C")).hexdigest()
++    require(evaluation["data_prefix_sha256"] == prefix_digest, "evaluation data prefix SHA256 differs")
++except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
++    print(f"INVALID {result_path}: {error}", file=sys.stderr)
++    sys.exit(1)
++print(f"VALID C seed={seed} step={step} full_fp32 accuracy={score:.9f}")
++PY
++}
++
++status=0
++for seed in 1000 2000 3000 4000 5000; do
++    out="$EXP_DIR/C/seed$seed"
++    if [[ ! -d "$out" ]]; then
++        echo "Missing run directory: $out" >&2
++        status=1
++        continue
++    fi
++    if ! mkdir -p "$out/rescore_curve_logs"; then
++        status=1
++        continue
++    fi
++    if ! log_dir=$(mktemp -d "$out/rescore_curve_logs/job-${SLURM_JOB_ID:-manual}.XXXXXX"); then
++        echo "Cannot create curve-rescoring log directory for seed $seed" >&2
++        status=1
++        continue
++    fi
++    if [[ -e "$out/CURVE_RESCORE_DONE" ]]; then
++        if ! mv "$out/CURVE_RESCORE_DONE" "$log_dir/prior_CURVE_RESCORE_DONE"; then
++            echo "Cannot archive existing curve marker for seed $seed" >&2
++            status=1
++            continue
++        fi
++    fi
++    seed_status=0
++    for step in 10000 20000 30000 40000 50000; do
++        checkpoint="$out/ema_step=$step.pt"
++        result="$out/rescore_full_fp32_step$step.json"
++        checkpoint_log="$log_dir/step$step.log"
++        if [[ ! -s "$checkpoint" ]]; then
++            echo "Missing checkpoint: $checkpoint" | tee "$checkpoint_log" >&2
++            seed_status=1
++            status=1
++            continue
++        fi
++        if [[ -s "$result" ]] && validate_result "$result" "$checkpoint" "$seed" "$step" > "$checkpoint_log" 2>&1; then
++            echo "Skip validated full_fp32 score: seed=$seed step=$step"
++            continue
++        fi
++        if [[ -f "$result" ]]; then
++            if ! cp -p "$result" "$log_dir/step$step.previous.json"; then
++                echo "Cannot preserve invalid previous score: $result" >&2
++                seed_status=1
++                status=1
++                continue
++            fi
++        fi
++        echo "[$(date -Is)] Rescore C seed=$seed step=$step full_fp32 -> $result"
++        if ! "$PY" -m torch.distributed.run --standalone --nproc_per_node=2 \
++            scripts/rescore_sudoku_checkpoint.py \
++            --checkpoint "$checkpoint" --mode full_fp32 \
++            --expected-step "$step" --expected-seed "$seed" \
++            --expected-world-size 2 --expected-test-count 999 \
++            --output "$result" >> "$checkpoint_log" 2>&1; then
++            echo "Rescoring failed for seed=$seed step=$step; log=$checkpoint_log" >&2
++            seed_status=1
++            status=1
++            continue
++        fi
++        if ! validate_result "$result" "$checkpoint" "$seed" "$step" >> "$checkpoint_log" 2>&1; then
++            echo "Output validation failed for seed=$seed step=$step; log=$checkpoint_log" >&2
++            seed_status=1
++            status=1
++        fi
++    done
++
++    # The training array produced the final result; never replace it here.
++    if ! validate_result "$out/rescore_full_fp32.json" "$out/ema_step=53570.pt" "$seed" 53570 \
++        > "$log_dir/final53570_validation.log" 2>&1; then
++        echo "Final full_fp32 score is missing or invalid for seed=$seed; log=$log_dir/final53570_validation.log" >&2
++        seed_status=1
++        status=1
++    fi
++    if [[ "$seed_status" == 0 ]]; then
++        if printf 'job=%s\nmode=full_fp32\nsteps=10000,20000,30000,40000,50000,53570\ncompleted=%s\n' \
++            "${SLURM_JOB_ID:-manual}" "$(date -Is)" > "$log_dir/CURVE_RESCORE_DONE" \
++            && mv "$log_dir/CURVE_RESCORE_DONE" "$out/CURVE_RESCORE_DONE"; then
++            echo "Validated all six full_fp32 checkpoints for seed=$seed"
++        else
++            echo "Cannot write curve completion marker for seed=$seed" >&2
++            status=1
++        fi
++    fi
++done
++echo "end=$(date -Is) exit=$status"
++exit "$status"
+diff --git a/scripts/rescore_sudoku_checkpoint.py b/scripts/rescore_sudoku_checkpoint.py
+new file mode 100644
+index 0000000..be52808
+--- /dev/null
++++ b/scripts/rescore_sudoku_checkpoint.py
+@@ -0,0 +1,274 @@
++#!/usr/bin/env python3
++"""Rescore a condition-C EMA checkpoint without changing training or sampling."""
++
++import argparse
++from collections.abc import Mapping
++from datetime import datetime, timezone
++import hashlib
++import json
++import os
++from pathlib import Path
++import random
++import sys
++import tempfile
++import time
++from typing import Any
++
++import torch
++import torch.distributed as dist
++from torch import nn
++
++
++REPO_ROOT = Path(__file__).resolve().parents[1]
++if str(REPO_ROOT) not in sys.path:
++    sys.path.insert(0, str(REPO_ROOT))
++
++PRECISION_MODES = ("legacy_bf16", "bf16_fp32_softmax", "full_fp32")
++
++
++class PrecisionModel(nn.Module):
++    """Preserve sampling's autocast region, controlling only model output precision."""
++
++    def __init__(self, model: nn.Module, mode: str):
++        super().__init__()
++        if mode not in PRECISION_MODES:
++            raise ValueError(f"Unknown precision mode {mode!r}; expected {PRECISION_MODES}")
++        self.model = model
++        self.mode = mode
++
++    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
++        if self.mode == "full_fp32":
++            # Token IDs remain integers; the checkpoint is loaded into FP32 weights.
++            with torch.autocast(device_type=input_ids.device.type, enabled=False):
++                return self.model(input_ids).float()
++        logits = self.model(input_ids)
++        if self.mode == "bf16_fp32_softmax":
++            # sampling.py computes softmax after leaving its autocast context.
++            return logits.float()
++        return logits
++
++
++def validate_checkpoint(
++    checkpoint: Mapping[str, Any],
++    expected_step: int | None = None,
++    expected_seed: int | None = None,
++) -> tuple[dict[str, Any], int, int]:
++    """Require a saved C EMA model, with the requested training provenance."""
++    if not isinstance(checkpoint, Mapping):
++        raise ValueError("Checkpoint must be a mapping saved by model/ema.py")
++    if checkpoint.get("is_ema_snapshot") is not True:
++        raise ValueError("Expected an EMA checkpoint with is_ema_snapshot=True")
++    state_dict = checkpoint.get("model_state_dict")
++    if not isinstance(state_dict, Mapping) or not state_dict:
++        raise ValueError("EMA checkpoint has no model_state_dict")
++    config = checkpoint.get("config")
++    if not isinstance(config, dict):
++        raise ValueError("EMA checkpoint has no resolved config dictionary")
++    training = config.get("training", {})
++    data = config.get("data", {})
++    model = config.get("model", {})
++    if not all(isinstance(section, Mapping) for section in (training, data, model)):
++        raise ValueError("Checkpoint model, training and data config sections must be mappings")
++    if data.get("dataset") != "sudoku" or model.get("max_position") != 81:
++        raise ValueError("Checkpoint must contain the 81-cell Sudoku model")
++    if (
++        training.get("strategy") != "progressive"
++        or training.get("mask_construction") != "independent"
++        or training.get("mode") != "standard"
++        or training.get("mask_schedule") != [81, 61, 41, 21]
++    ):
++        raise ValueError("Checkpoint must be condition C with its fixed four-state schedule")
++    step = checkpoint.get("global_step")
++    if isinstance(step, bool) or not isinstance(step, int) or step <= 0:
++        raise ValueError("Checkpoint global_step must be a positive integer")
++    seed = training.get("seed", 2026)
++    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
++        raise ValueError("Checkpoint training seed must be a nonnegative integer")
++    if expected_step is not None and step != expected_step:
++        raise ValueError(f"Expected checkpoint step {expected_step}, found {step}")
++    if expected_seed is not None and seed != expected_seed:
++        raise ValueError(f"Expected checkpoint seed {expected_seed}, found {seed}")
++    return config, step, seed
++
++
++def sha256_file(path: Path) -> str:
++    digest = hashlib.sha256()
++    with path.open("rb") as handle:
++        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
++            digest.update(chunk)
++    return digest.hexdigest()
++
++
++def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    temporary_path = None
++    try:
++        with tempfile.NamedTemporaryFile(
++            mode="w", encoding="utf-8", dir=path.parent,
++            prefix=f".{path.name}.", suffix=".tmp", delete=False,
++        ) as handle:
++            temporary_path = Path(handle.name)
++            json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
++            handle.write("\n")
++            handle.flush()
++            os.fsync(handle.fileno())
++        os.replace(temporary_path, path)
++    finally:
++        if temporary_path is not None and temporary_path.exists():
++            temporary_path.unlink()
++
++
++def parse_args() -> argparse.Namespace:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--checkpoint", type=Path, required=True)
++    parser.add_argument("--mode", choices=PRECISION_MODES, required=True)
++    parser.add_argument("--output", type=Path, required=True)
++    parser.add_argument("--data-dir", type=Path, help="Override only the saved validation data directory")
++    parser.add_argument("--expected-step", type=int)
++    parser.add_argument("--expected-seed", type=int)
++    parser.add_argument("--expected-test-count", type=int, default=999)
++    parser.add_argument("--expected-world-size", type=int, default=2)
++    parser.add_argument("--all-decoders", action="store_true", help="Evaluate all six original decoders")
++    args = parser.parse_args()
++    if not args.checkpoint.is_file():
++        parser.error(f"checkpoint does not exist: {args.checkpoint}")
++    if args.output.suffix.lower() != ".json":
++        parser.error("--output must be a .json file")
++    if args.output.resolve() == args.checkpoint.resolve():
++        parser.error("output must not overwrite the checkpoint")
++    if args.expected_test_count <= 0 or args.expected_world_size <= 0:
++        parser.error("expected test count and world size must be positive")
++    if args.expected_step is not None and args.expected_step <= 0:
++        parser.error("expected step must be positive")
++    if args.expected_seed is not None and args.expected_seed < 0:
++        parser.error("expected seed must be nonnegative")
++    return args
++
++
++def main() -> None:
++    args = parse_args()
++    # Keep training's imports and distributed evaluator out of CPU-only unit tests.
++    import numpy as np
++    from omegaconf import OmegaConf
++    from torch.nn.parallel import DistributedDataParallel
++    from model.transformer import MDMConfig, MDMTransformer
++    from train import evaluate_ddp_dict, setup_ddp
++
++    if not torch.cuda.is_available():
++        raise RuntimeError("CUDA is required to preserve the original bf16 evaluation protocol")
++    if not torch.cuda.is_bf16_supported() and args.mode != "full_fp32":
++        raise RuntimeError("The selected CUDA device does not support bfloat16")
++    rank, world_size, local_rank = setup_ddp()
++    try:
++        if world_size != args.expected_world_size:
++            raise ValueError(f"Expected world size {args.expected_world_size}, found {world_size}")
++        device = torch.device(f"cuda:{local_rank}")
++        checkpoint_path = args.checkpoint.resolve()
++        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
++        saved_config, step, seed = validate_checkpoint(
++            checkpoint, args.expected_step, args.expected_seed
++        )
++        cfg = OmegaConf.create(saved_config)
++        if args.data_dir is not None:
++            cfg.validation.val_dir = str(args.data_dir.resolve())
++        if float(cfg.validation.sampling.temperature) != 0.0:
++            raise ValueError("The matched Sudoku protocol requires greedy temperature=0 decoding")
++        if args.all_decoders:
++            cfg.validation.sampling.confidence = ["top_k", "top_k_margin"]
++            cfg.validation.sampling.unmasking_num = [1, 2, 3]
++        else:
++            cfg.validation.sampling.confidence = ["top_k"]
++            cfg.validation.sampling.unmasking_num = [1]
++
++        data_path = (Path(cfg.validation.val_dir) / "test_mdm.npy").resolve()
++        raw = np.load(data_path, mmap_mode="r", allow_pickle=False)
++        if raw.ndim != 2 or raw.shape[1] != 162:
++            raise ValueError(f"Expected Sudoku cache shape [N,162], found {raw.shape}")
++        ratio = float(cfg.validation.ratio)
++        if not 0.0 < ratio <= 1.0:
++            raise ValueError(f"Invalid saved validation ratio: {ratio}")
++        test_count = int(len(raw) * ratio)
++        if test_count != args.expected_test_count:
++            raise ValueError(f"Expected {args.expected_test_count} test puzzles, found {test_count}")
++        prefix_sha256 = hashlib.sha256(raw[:test_count].tobytes(order="C")).hexdigest()
++        del raw
++
++        torch.manual_seed(seed + rank)
++        torch.cuda.manual_seed(seed + rank)
++        np.random.seed(seed + rank)
++        random.seed(seed + rank)
++        if args.mode == "full_fp32":
++            torch.set_float32_matmul_precision("highest")
++            torch.backends.cuda.matmul.allow_tf32 = False
++            torch.backends.cudnn.allow_tf32 = False
++
++        model_config = MDMConfig(**OmegaConf.to_container(cfg.model, resolve=True))
++        model = MDMTransformer(model_config).to(device=device, dtype=torch.float32)
++        model.load_state_dict(checkpoint["model_state_dict"], strict=True)
++        if world_size > 1:
++            model = DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
++        evaluated_model = PrecisionModel(model, args.mode).eval()
++        del checkpoint
++
++        if world_size > 1:
++            dist.barrier()
++        torch.cuda.synchronize(device)
++        started = time.perf_counter()
++        with torch.inference_mode():
++            metrics = evaluate_ddp_dict(evaluated_model, cfg, device, rank, world_size)
++        torch.cuda.synchronize(device)
++        elapsed = torch.tensor(time.perf_counter() - started, device=device, dtype=torch.float64)
++        if world_size > 1:
++            dist.all_reduce(elapsed, op=dist.ReduceOp.MAX)
++
++        if rank == 0:
++            record = {
++                "schema_version": 1,
++                "type": "checkpoint_rescore",
++                "condition": "C",
++                "mode": args.mode,
++                "seed": seed,
++                "step": step,
++                "checkpoint": str(checkpoint_path),
++                "checkpoint_sha256": sha256_file(checkpoint_path),
++                "is_ema_snapshot": True,
++                "metrics": {key: float(value) for key, value in metrics.items()},
++                "eval_time_s": elapsed.item(),
++                "evaluation": {
++                    "test_count": test_count,
++                    "world_size": world_size,
++                    "per_rank_batch_size": 16,
++                    "training_per_rank_batch_size": int(cfg.training.batch_size),
++                    "validation_ratio": ratio,
++                    "data_file": str(data_path),
++                    "data_prefix_sha256": prefix_sha256,
++                    "accuracy_definition": "valid_completed_grid_preserving_givens",
++                    "sampling": OmegaConf.to_container(cfg.validation.sampling, resolve=True),
++                },
++                "precision": {
++                    "model_forward": "float32" if args.mode == "full_fp32" else "bfloat16_autocast",
++                    "softmax": "bfloat16" if args.mode == "legacy_bf16" else "float32",
++                    "allow_tf32_matmul": torch.backends.cuda.matmul.allow_tf32,
++                    "float32_matmul_precision": torch.get_float32_matmul_precision(),
++                },
++                "torch_version": str(torch.__version__),
++                "cuda_version": torch.version.cuda,
++                "gpu": torch.cuda.get_device_name(device),
++                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
++                "source_sha256": {
++                    name: sha256_file(REPO_ROOT / name)
++                    for name in (
++                        "sampling.py", "eval/sudoku_eval.py", "model/transformer.py",
++                        "scripts/rescore_sudoku_checkpoint.py",
++                    )
++                },
++            }
++            write_json_atomic(args.output.resolve(), record)
++            print(json.dumps(record, sort_keys=True, allow_nan=False), flush=True)
++    finally:
++        if dist.is_initialized():
++            dist.destroy_process_group()
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/run_sudoku_AE.sbatch b/scripts/run_sudoku_AE.sbatch
+index cc85314..3ad460f 100644
+--- a/scripts/run_sudoku_AE.sbatch
++++ b/scripts/run_sudoku_AE.sbatch
+@@ -2,7 +2,7 @@
+ # Runs Sudoku training items sequentially on one 2-GPU allocation (PUMA setup: 2 GPUs x 32).
+ # Usage (from the repo root, after mkdir -p runs/logs):
+ #   EXP_DIR=runs/<exp> sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 ...
+-# Each item is COND:SEED with COND in {A, E, F, P, PN} (P = stock PUMA, PN = PUMA without collapse); DONE items are skipped.
++# Each item is COND:SEED with COND in {A, C, E, F, P, PN} (P = stock PUMA, PN = PUMA without collapse); DONE items are skipped.
+ #SBATCH --job-name=puma_sudoku_AE
+ #SBATCH --partition=cscc-gpu-p
+ #SBATCH --qos=cscc-gpu-qos
+@@ -44,6 +44,7 @@ for item in "$@"; do
+     cond=${item%%:*}; seed=${item##*:}
+     case $cond in
+         A) cfg=yaml_files/sudoku_A_random.yaml ;;
++        C) cfg=yaml_files/sudoku_C_reuse.yaml ;;
+         E) cfg=yaml_files/sudoku_E_confidence.yaml ;;
+         F) cfg=yaml_files/sudoku_F_gtmargin.yaml ;;
+         P) cfg=yaml_files/sudoku_PUMA_reference.yaml ;;
+@@ -52,6 +53,11 @@ for item in "$@"; do
+     esac
+     out=$EXP_DIR/$cond/seed$seed
+     if [ -f "$out/DONE" ]; then echo "skip $item (DONE)"; continue; fi
++    if [ -f "$out/metrics.jsonl" ]; then
++        echo "refusing to append a new training run to incomplete $out; use a new EXP_DIR"
++        status=1
++        continue
++    fi
+     mkdir -p "$out"
+     {
+         echo "condition=$cond seed=$seed config=$cfg extra=$EXTRA"
+diff --git a/scripts/run_sudoku_C_array.sbatch b/scripts/run_sudoku_C_array.sbatch
+new file mode 100644
+index 0000000..346567d
+--- /dev/null
++++ b/scripts/run_sudoku_C_array.sbatch
+@@ -0,0 +1,61 @@
++#!/bin/bash
++# Submit from the repository root after data preprocessing and the two-GPU smoke run.
++# EXP_DIR=runs/sudoku_C_20261022 sbatch scripts/run_sudoku_C_array.sbatch
++# Two array items cover five seeds within the account's two-job/four-GPU quota.
++# Every seed still uses exactly the A/F two-GPU training configuration.
++#SBATCH --job-name=puma_sudoku_C
++#SBATCH --partition=cscc-gpu-p
++#SBATCH --qos=cscc-gpu-qos
++#SBATCH --account=cscc-users
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --gres=gpu:2
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=96G
++#SBATCH --time=08:00:00
++#SBATCH --array=0-1
++#SBATCH --exclude=gpu-02,gpu-05,gpu-51,gpu-52,gpu-54,gpu-55
++#SBATCH --output=runs/logs/%x_%A_%a.out
++
++set -euo pipefail
++cd "${SLURM_SUBMIT_DIR:?submit from the repository root}"
++export EXP_DIR=${EXP_DIR:-runs/sudoku_C_20261022}
++export PY=${PY:-.venv/bin/python}
++task=${SLURM_ARRAY_TASK_ID:?this launcher requires a job array}
++case "$task" in
++    0) seeds=(1000 3000 5000) ;;
++    1) seeds=(2000 4000) ;;
++    *) echo "invalid array task index: $task" >&2; exit 2 ;;
++esac
++if [[ -n "${EXTRA:-}" || "${RUN_TIMEOUT:-0}" != 0 ]]; then
++    echo "full study forbids smoke overrides and per-run timeouts" >&2
++    exit 2
++fi
++for cache in data/sudoku_new/train_mdm.npy data/sudoku_new/test_mdm.npy; do
++    test -s "$cache" || { echo "missing preprocessed cache: $cache" >&2; exit 1; }
++done
++"$PY" -m unittest discover -s tests -p test_condition_c.py -v
++"$PY" -m unittest discover -s tests -p test_rescore_precision.py -v
++status=0
++for seed in "${seeds[@]}"; do
++    if ! bash scripts/run_sudoku_AE.sbatch "C:$seed"; then
++        status=1
++        continue
++    fi
++    out="$EXP_DIR/C/seed$seed"
++    rescore_status=0
++    for mode in legacy_bf16 bf16_fp32_softmax full_fp32; do
++        if ! "$PY" -m torch.distributed.run --standalone --nproc_per_node=2 \
++            scripts/rescore_sudoku_checkpoint.py \
++            --checkpoint "$out/ema_step=53570.pt" --mode "$mode" \
++            --expected-step 53570 --expected-seed "$seed" \
++            --output "$out/rescore_$mode.json" > "$out/rescore_$mode.log" 2>&1; then
++            status=1
++            rescore_status=1
++        fi
++    done
++    if [[ "$rescore_status" == 0 ]]; then
++        touch "$out/RESCORE_DONE"
++    fi
++done
++exit "$status"
+diff --git a/scripts/smoke_sudoku_C.sbatch b/scripts/smoke_sudoku_C.sbatch
+new file mode 100644
+index 0000000..9508ea4
+--- /dev/null
++++ b/scripts/smoke_sudoku_C.sbatch
+@@ -0,0 +1,51 @@
++#!/bin/bash
++# A short end-to-end check on a separate data subset and output directory.
++#SBATCH --job-name=puma_C_smoke
++#SBATCH --partition=long,cscc-gpu-p
++#SBATCH --qos=gpu-debug-qos
++#SBATCH --account=cscc-users
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --gres=gpu:2
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=32G
++#SBATCH --time=00:20:00
++#SBATCH --exclude=gpu-02,gpu-05,gpu-51,gpu-52,gpu-54,gpu-55
++#SBATCH --output=runs/logs/%x_%j.out
++
++set -euo pipefail
++cd "${SLURM_SUBMIT_DIR:?submit from the repository root}"
++export PY=${PY:-.venv/bin/python}
++export EXP_DIR="runs/smoke_C_${SLURM_JOB_ID}"
++"$PY" -m unittest discover -s tests -p test_condition_c.py -v
++"$PY" - <<'PY'
++from pathlib import Path
++import numpy as np
++source = Path("data/sudoku_new")
++destination = Path("data/sudoku_c_smoke")
++destination.mkdir(parents=True, exist_ok=True)
++for filename, count in (("train_mdm.npy", 4096), ("test_mdm.npy", 999)):
++    data = np.load(source / filename, mmap_mode="r")
++    assert data.ndim == 2 and data.shape[1] == 162
++    np.save(destination / filename, data[:count])
++PY
++export EXTRA="data.data_dir=data/sudoku_c_smoke validation.val_dir=data/sudoku_c_smoke validation.ratio=0.02 training.num_epochs=1 training.warmup_steps=10 training.logging_steps=1"
++export RUN_TIMEOUT=600
++bash scripts/run_sudoku_AE.sbatch C:1000
++"$PY" - <<'PY'
++import json
++import math
++import os
++from pathlib import Path
++run = Path(os.environ["EXP_DIR"]) / "C" / "seed1000"
++records = [json.loads(line) for line in (run / "metrics.jsonl").read_text().splitlines()]
++training = [record for record in records if "loss" in record]
++evaluations = [record for record in records if "val_acc" in record]
++assert len(training) == 61, len(training)
++assert all(math.isfinite(record["loss"]) for record in training)
++assert len(evaluations) == 1 and evaluations[0]["step"] == 61
++assert len(evaluations[0]["val_acc"]) == 6
++assert (run / "ema_step=61.pt").is_file()
++assert (run / "DONE").is_file()
++print("C two-GPU smoke passed: 61 finite-loss updates, six decoders, EMA checkpoint.")
++PY
+diff --git a/scripts/status_sudoku_c.py b/scripts/status_sudoku_c.py
+new file mode 100644
+index 0000000..53c5ed1
+--- /dev/null
++++ b/scripts/status_sudoku_c.py
+@@ -0,0 +1,50 @@
++"""Print a compact, read-only status snapshot for the five condition C runs."""
++
++import argparse
++import datetime
++import json
++from pathlib import Path
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("experiment", type=Path)
++    args = parser.parse_args()
++    rows = []
++    for seed in (1000, 2000, 3000, 4000, 5000):
++        directory = args.experiment / "C" / f"seed{seed}"
++        row = {"seed": seed, "started": directory.exists(), "done": (directory / "DONE").exists()}
++        path = directory / "metrics.jsonl"
++        if path.exists():
++            records = []
++            lines = path.read_text().splitlines()
++            for index, line in enumerate(lines):
++                try:
++                    records.append(json.loads(line))
++                except json.JSONDecodeError:
++                    if index != len(lines) - 1:
++                        raise
++            training = [record for record in records if "loss" in record]
++            evaluations = [record for record in records if "val_acc" in record]
++            if records:
++                row["step"] = records[-1]["step"]
++                row["train_time_s"] = records[-1].get("train_time_s")
++            if training:
++                row["loss"] = training[-1]["loss"]
++            if evaluations:
++                last = evaluations[-1]
++                row["evaluation_step"] = last["step"]
++                row["accuracy"] = last["val_acc"]["top_k_unmasking_1"]
++                row["val_loss"] = last["val_loss"]
++        info = directory / "run_info.txt"
++        if info.exists():
++            for line in info.read_text().splitlines():
++                if line.startswith("slurm_job=") or line.startswith("end="):
++                    row.setdefault("run_info", []).append(line)
++        row["rescores"] = sorted(path.name for path in directory.glob("rescore_*.json"))
++        rows.append(row)
++    print(json.dumps({"utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "runs": rows}, indent=2))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_condition_c.py b/tests/test_condition_c.py
+new file mode 100644
+index 0000000..1a359e7
+--- /dev/null
++++ b/tests/test_condition_c.py
+@@ -0,0 +1,166 @@
++"""Behavioral contract for condition C; run with unittest and PyTorch only."""
++
++import unittest
++from unittest.mock import patch
++
++import torch
++
++from progressive import PhasedMasking
++
++
++class CountingExamples:
++    """A deterministic stream of unique examples, with observable consumption."""
++
++    def __init__(self, length=81, given_count=None):
++        self.length = length
++        self.given_count = given_count
++        self.draws = 0
++
++    def __iter__(self):
++        for index in range(128):
++            labels = (torch.arange(self.length, dtype=torch.long) + index) % 9
++            if self.length >= 3:
++                labels[:3] = torch.tensor(
++                    [(index // 81) % 9, (index // 9) % 9, index % 9]
++                )
++            givens = self.given_count
++            if givens is None:
++                givens = 20 + index % 10
++            prompt_mask = torch.arange(self.length) < givens
++            self.draws += 1
++            yield {"labels": labels, "prompt_mask": prompt_mask}
++
++
++def make_pool(loader, **overrides):
++    settings = {
++        "train_loader": loader,
++        "batch_size": 8,
++        "mask_id": 10,
++        "K": 20,
++        "device": torch.device("cpu"),
++        "L": 81,
++        "reference_length": 81,
++        "mode": "standard",
++        "prompt_only_reset": True,
++        "mask_schedule": [81, 61, 41, 21],
++        "random_tie_break": True,
++        "mask_construction": "independent",
++    }
++    settings.update(overrides)
++    return PhasedMasking(**settings)
++
++
++class ConditionCContract(unittest.TestCase):
++    def test_reuses_examples_and_matches_ef_schedule_without_using_logits(self):
++        """C keeps E/F counts, staggering and draws, independently of predictions."""
++        pools = []
++        loaders = []
++        for construction, reveal_score in (
++            ("independent", "confidence"),
++            ("independent", "gt_margin"),
++            ("nested", "confidence"),
++            ("nested", "gt_margin"),
++        ):
++            torch.manual_seed(2509)
++            loader = CountingExamples()
++            pools.append(
++                make_pool(
++                    loader,
++                    mask_construction=construction,
++                    reveal_score=reveal_score,
++                )
++            )
++            loaders.append(loader)
++
++        logits = torch.linspace(-4.0, 4.0, 8 * 81 * 11).reshape(8, 81, 11)
++        predictions = logits.log_softmax(dim=-1)
++        different_predictions = (-logits.flip(1)).log_softmax(dim=-1)
++        saw_remasking = False
++        for update in range(9):
++            c = pools[0]
++            stages = c.state["stage"]
++            counts = (c.current_batch() == c.mask_id).sum(dim=1)
++            expected_counts = torch.tensor(
++                [
++                    int(length) - round((1 - [81, 61, 41, 21][int(stage)] / 81) * int(length))
++                    for length, stage in zip(c.state["L_eff"], stages)
++                ]
++            )
++            self.assertTrue(torch.equal(counts, expected_counts))
++            self.assertTrue(torch.equal(torch.bincount(stages, minlength=4), torch.full((4,), 2)))
++            self.assertTrue(torch.equal(c.current_batch(), pools[1].current_batch()))
++            visible = c.current_batch() != c.mask_id
++            self.assertTrue(torch.equal(c.current_batch()[visible], c.x0[visible]))
++            self.assertTrue(visible[c.state["prompt_mask"]].all().item())
++
++            for pool, loader in zip(pools[1:], loaders[1:]):
++                self.assertTrue(torch.equal(c.x0, pool.x0))
++                self.assertTrue(torch.equal(stages, pool.state["stage"]))
++                self.assertTrue(torch.equal(counts, (pool.current_batch() == pool.mask_id).sum(dim=1)))
++                self.assertEqual(loaders[0].draws, loader.draws)
++
++            if update == 8:
++                break
++            previous_x0 = c.x0.clone()
++            previous_visible = visible.clone()
++            wraps = stages == 3
++            for index, pool in enumerate(pools):
++                torch.manual_seed(900 + update)
++                pool.update_with_logits(different_predictions if index == 1 else predictions)
++
++            self.assertTrue(torch.equal(c.x0[~wraps], previous_x0[~wraps]))
++            self.assertTrue((c.x0[wraps] != previous_x0[wraps]).any(dim=1).all().item())
++            self.assertTrue((c.current_batch()[wraps][~c.state["prompt_mask"][wraps]] == c.mask_id).all().item())
++            remasked = previous_visible & (c.current_batch() == c.mask_id)
++            saw_remasking |= remasked[~wraps].any().item()
++
++        self.assertTrue(saw_remasking, "independent states must permit previously visible cells to be hidden")
++
++    def test_rounding_boundary_resamples_even_when_mask_count_does_not_change(self):
++        """A small target retains masks and resamples across equal rounded counts."""
++        torch.manual_seed(7)
++        loader = CountingExamples(length=4, given_count=2)
++        pool = make_pool(
++            loader,
++            batch_size=1,
++            L=4,
++            reference_length=4,
++            mask_schedule=[4, 3, 2, 1],
++        )
++        predictions = torch.zeros(1, 4, 11).log_softmax(dim=-1)
++        original_example = pool.x0.clone()
++        self.assertEqual((pool.current_batch() == pool.mask_id).sum().item(), 2)
++        pool.update_with_logits(predictions)
++        self.assertEqual((pool.current_batch() == pool.mask_id).sum().item(), 2)
++        pool.update_with_logits(predictions)
++        before = pool.current_batch().clone()
++        self.assertEqual((before == pool.mask_id).sum().item(), 1)
++
++        # Force selection of the other target, while giving clues larger scores.
++        scores = torch.where(before == pool.mask_id, 0.9, 0.1)
++        scores[pool.state["prompt_mask"]] = 100.0
++        with patch("progressive.torch.rand", return_value=scores):
++            pool.update_with_logits(predictions)
++
++        self.assertEqual((pool.current_batch() == pool.mask_id).sum().item(), 1)
++        self.assertTrue(((before != pool.mask_id) & (pool.current_batch() == pool.mask_id)).any().item())
++        self.assertTrue(torch.equal(pool.x0, original_example))
++        givens = pool.state["prompt_mask"]
++        self.assertTrue(torch.equal(pool.current_batch()[givens], pool.x0[givens]))
++        self.assertEqual(loader.draws, 1)
++
++        pool.update_with_logits(predictions)
++        self.assertEqual(loader.draws, 2)
++        self.assertEqual(pool.state["stage"].item(), 0)
++        self.assertEqual((pool.current_batch() == pool.mask_id).sum().item(), 2)
++
++    def test_rejects_independent_construction_without_fixed_schedule(self):
++        """Configuration errors fail before consuming training examples."""
++        loader = CountingExamples()
++        with self.assertRaisesRegex(ValueError, "requires a fixed mask_schedule"):
++            make_pool(loader, mask_schedule=None)
++        self.assertEqual(loader.draws, 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_rescore_precision.py b/tests/test_rescore_precision.py
+new file mode 100644
+index 0000000..8cec1f6
+--- /dev/null
++++ b/tests/test_rescore_precision.py
+@@ -0,0 +1,44 @@
++"""Three behavioral tests for offline rescoring; CUDA sanity is separate."""
++
++import unittest
++
++import torch
++from torch import nn
++
++from scripts.rescore_sudoku_checkpoint import PrecisionModel, validate_checkpoint
++
++
++class RescorePrecisionContract(unittest.TestCase):
++    def test_precision_modes_preserve_or_override_the_outer_autocast(self):
++        torch.manual_seed(42)
++        model = nn.Linear(4, 3).eval()
++        inputs = torch.randn(2, 4)
++        reference = model(inputs)
++        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
++            legacy = PrecisionModel(model, "legacy_bf16")(inputs)
++            softmax_only = PrecisionModel(model, "bf16_fp32_softmax")(inputs)
++            full = PrecisionModel(model, "full_fp32")(inputs)
++            self.assertTrue(torch.is_autocast_enabled("cpu"))
++        self.assertEqual(legacy.dtype, torch.bfloat16)
++        self.assertEqual(softmax_only.dtype, torch.float32)
++        self.assertTrue(torch.equal(softmax_only, legacy.float()))
++        self.assertEqual(full.dtype, torch.float32)
++        torch.testing.assert_close(full, reference, rtol=0.0, atol=0.0)
++
++    def test_fp32_softmax_distinguishes_confidences_rounded_to_one_in_bf16(self):
++        logits = torch.tensor([[[8.0, 0.0, -8.0], [9.0, 0.0, -8.0]]], dtype=torch.bfloat16)
++        identity = nn.Identity()
++        legacy = PrecisionModel(identity, "legacy_bf16")(logits).softmax(dim=-1).amax(dim=-1)
++        fixed = PrecisionModel(identity, "bf16_fp32_softmax")(logits).softmax(dim=-1).amax(dim=-1)
++        self.assertTrue(torch.equal(legacy, torch.ones_like(legacy)))
++        self.assertTrue((fixed < 1.0).all().item())
++        self.assertGreater(fixed[0, 1].item(), fixed[0, 0].item())
++
++    def test_rejects_non_ema_checkpoint_before_loading_model_weights(self):
++        checkpoint = {"is_ema_snapshot": False, "global_step": 53570}
++        with self.assertRaisesRegex(ValueError, "Expected an EMA checkpoint"):
++            validate_checkpoint(checkpoint, expected_step=53570, expected_seed=1000)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/train.py b/train.py
+index 9d5c5f3..ef11f67 100644
+--- a/train.py
++++ b/train.py
+@@ -361,6 +361,7 @@ def main(cfg: DictConfig):
+                 mask_schedule=getattr(train_cfg, "mask_schedule", None),
+                 random_tie_break=bool(getattr(train_cfg, "random_tie_break", False)),
+                 reveal_score=getattr(train_cfg, "reveal_score", "confidence"),
++                mask_construction=getattr(train_cfg, "mask_construction", "nested"),
+             )
+         pool = make_pool(current_k)
+         next_k_idx = 1
+diff --git a/yaml_files/sudoku_C_reuse.yaml b/yaml_files/sudoku_C_reuse.yaml
+new file mode 100644
+index 0000000..4786f96
+--- /dev/null
++++ b/yaml_files/sudoku_C_reuse.yaml
+@@ -0,0 +1,63 @@
++# Option C (reuse only): the E/F schedule and example lifetime, with independent
++# uniform masks at every state. Visible target cells may be masked again.
++# Model, optimizer, data, loss and evaluation settings match sudoku_E_confidence.yaml.
++model:
++  vocab_size: 11
++  hidden_size: 256
++  intermediate_size: 768
++  num_layers: 8
++  num_attention_heads: 8
++  num_kv_heads: 8
++  max_position: 81
++  rms_norm_eps: 1e-6
++  dropout: 0.0
++
++training:
++  strategy: "progressive"
++  diffusion_layout: "full"
++  prompt_only_reset: true
++  confidence_threshold: null
++  mode: "standard"
++  mask_schedule: [81, 61, 41, 21] # rescaled to each puzzle's empty cells, exactly as E/F
++  mask_construction: "independent"
++  K: 20 # unused when mask_schedule is set
++  reference_length: 81
++  random_tie_break: true # unused for independent mask construction
++  data_ratio: 1.0
++  learning_rate: 3e-4
++  weight_decay: 0.01
++  num_epochs: 2
++  max_grad_norm: 1.0
++  batch_size: 32
++  warmup_steps: 1000
++  logging_steps: 100
++  eval_steps: 1000
++  save_steps: 10000
++  ema: 0.9999
++  eos_id: null
++
++validation:
++  val_dir: "data/sudoku_new"
++  ratio: 0.01
++  sampling:
++    temperature: 0.0
++    confidence: ["top_k", "top_k_margin"]
++    unmasking_num: [1, 2, 3]
++
++data:
++  mask_id: 10
++  dataset: "sudoku"
++  data_dir: "data/sudoku_new"
++  sudoku_type: "new"
++  val_ratio: 0.05
++  seed: 2026
++  mmap: false
++  training:
++    per_gpu_batch_size: ${training.batch_size}
++    cpus: 4
++
++wandb:
++  wandb: false
++  project: "mdm-pretraining"
++  name: "sudoku-C-reuse"
++  entity: "your-entity-here"

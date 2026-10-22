@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "mode": "full_fp32",
+  "decoder": "top_k_unmasking_1",
+  "weights": "EMA",
+  "test_count": 999,
+  "accuracy_definition": "valid_completed_grid_preserving_givens",
+  "final_step": 53570,
+  "seeds": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000
+  ],
+  "allowed_checkpoint_steps": [
+    10000,
+    20000,
+    30000,
+    40000,
+    50000,
+    53570
+  ],
+  "baseline_exact_curve_data_available": false,
+  "baseline_available_steps": [
+    53570
+  ],
+  "standard_deviation": "sample (ddof=1)",
+  "final_conditions": {
+    "B": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.793993993993994,
+      "sample_sd": 0.1755970895013492
+    },
+    "C": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.8248248248248248,
+      "sample_sd": 0.10898276289383259
+    },
+    "D": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.7413413413413414,
+      "sample_sd": 0.1781635562152759
+    }
+  },
+  "paired_final_differences_pp": {
+    "C-B": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 3.083083083083082,
+      "sample_sd": 13.239614779578133
+    },
+    "C-D": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 8.348348348348344,
+      "sample_sd": 17.64725303421946
+    }
+  },
+  "c_checkpoint_summaries": {
+    "10000": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.6216216216216216,
+      "sample_sd": 0.10390901486231087
+    },
+    "20000": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.7917917917917918,
+      "sample_sd": 0.103163825573886
+    },
+    "30000": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.8386386386386386,
+      "sample_sd": 0.10042090734955138
+    },
+    "40000": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.847047047047047,
+      "sample_sd": 0.09221006935842356
+    },
+    "50000": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.8312312312312312,
+      "sample_sd": 0.10641869456146218
+    },
+    "53570": {
+      "n": 5,
+      "expected_n": 5,
+      "all_five_available": true,
+      "mean": 0.8248248248248248,
+      "sample_sd": 0.10898276289383259
+    }
+  },
+  "source": {
+    "report_url": "https://forge.coreweave.com/wandb/puma-mbz/puma-sudoku/reports/Sudoku-progression-conditions-final-accuracy-and-the-bf16-eval-issue--VmlldzoxODE2MjE5Ng",
+    "report_id": "VmlldzoxODE2MjE5Ng==",
+    "entity": "puma-mbz",
+    "project": "puma-sudoku",
+    "author": "Timur Aisin",
+    "raw_artifact": "report_access/runs.json",
+    "raw_artifact_sha256": "82962a15015f84b806a615b94ea18f0b490f29c58aa6baae9dc907553f9c4d3a",
+    "report_text_artifact": "report_access/report_text.txt",
+    "report_text_sha256": "74ff40bb660d8da314e327e27cbf68d10b31cace1dd669077cd36ec0219012fc",
+    "network_access_for_this_extraction": false
+  },
+  "baseline_file": "/Users/antonegorov/puma-c-study/repo/results/sudoku_baselines/bd_full_fp32.json",
+  "baseline_file_sha256": "84edb2b96b08b06db00c914a13b3a6ffbbc932c32984e1e1272848178ce25784",
+  "limitations": [
+    "The downloaded report and run-summary artifacts contain exact final values only; full six-checkpoint B/D histories were not downloaded.",
+    "Rounded illustrative intermediate scores in report prose are not used as curve observations.",
+    "C-B/D paired comparisons are restricted to step 53570. No 1000-update threshold times are inferred.",
+    "The report identifies B/D scores as full-fp32 EMA re-scores, but omits re-score device, batch/world size, TF32 settings, and a test-data hash.",
+    "Training node and training configuration metadata do not establish the execution settings used for retrospective B/D rescoring.",
+    "Only available re-scores contribute statistics; counts below 5 are explicitly provisional, and a missing C score is never replaced by zero or a previous checkpoint.",
+    "Matching full-fp32 labels, seeds, decoder, and test count does not prove identical undocumented B/D kernel or data-hash settings.",
+    "A/F legacy-bf16 results and fixed-softmax mixed-precision results are excluded. No threshold times are computed."
+  ],
+  "warnings": []
+}

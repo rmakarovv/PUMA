@@ -1,0 +1,457 @@
+{
+  "source_base": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
+  "branch": "study/sudoku-c-5seeds",
+  "remote_worktree": "/home/anton.egorov/PUMA-C",
+  "seeds": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000
+  ],
+  "updates_per_seed": 53570,
+  "training_gpus_per_seed": 2,
+  "training_batch_per_rank": 32,
+  "experiment": "runs/sudoku_C_20261022",
+  "jobs": {
+    "preprocess": 335448,
+    "smoke": 335454,
+    "training_array": 335458,
+    "analysis": 335628,
+    "superseded_analysis": 335557,
+    "fp32_curve": 335627,
+    "precision_diagnostic": 335714
+  },
+  "seed_assignment": {
+    "335458_0": [
+      1000,
+      3000,
+      5000
+    ],
+    "335458_1": [
+      2000,
+      4000
+    ]
+  },
+  "smoke": {
+    "status": "COMPLETED",
+    "node": "gpu-12",
+    "partition": "long",
+    "updates": 61,
+    "runtime_s": 26,
+    "exit_code": 0
+  },
+  "training_status_at_last_check": "All five seeds completed 53,570 updates; all 15 final precision scores and 25 intermediate full-FP32 scores verified; reports and plots complete",
+  "patch_sha256": "44ebad38f21e20c46e2ee12896f1e9b106a173aea04184bad733c854684f7d63",
+  "files_sha256": {
+    ".gitignore": "7b35e41a700174277aed54221915b318eb1b9152e3eb58bab1bd1e7a798c454d",
+    "docs/condition_c_protocol.md": "aa0aecf4835072c7164ddecaaf232b2343985c88f176b9d46e96635e02eae19c",
+    "progressive.py": "dca0d386f446aeecfb7f77c048c3529f11867d0eabc8422d9e0f6daa0b101125",
+    "scripts/bootstrap_c.sh": "7d23798def31389e46e6595896c2fa4c6f3001bcd2c97fbbec791feb8ab09632",
+    "scripts/compare_sudoku_c.py": "3962108868ade31d1e569bab7e4ecb92e84e1001ec7a2206f5706d2f70ea429f",
+    "scripts/export_sudoku_results.py": "08a6dfbd236303ec95f43ff99835856ebe66364eaed622bbfa89ad8e0c669f76",
+    "scripts/finalize_sudoku_C.sbatch": "69908e3564fe319b901d065af34bff72f5799d7367e63d0196df4f16ffd80ad5",
+    "scripts/plot_sudoku_c.py": "e1d919352946ce7b684dfa14d59557bf553b477c3dfae65a1a34ab1f81d9244d",
+    "scripts/rescore_sudoku_checkpoint.py": "8544e0d81601f6f2da5c173c53c924b2fa1d47b0883110b5214ba951ef61b072",
+    "scripts/run_sudoku_AE.sbatch": "90808e188699253e15649c71acc510099904cd02460f7ee3c1c66545592e9086",
+    "scripts/run_sudoku_C_array.sbatch": "6fdee2af640d9ccd6b23441f7168cf6c531b633416a24ba3b24c751a2a7209fd",
+    "scripts/smoke_sudoku_C.sbatch": "4040877ba8b6430403e4694ca10e7dadccc7aa77c2ac3135f8621831b9185db3",
+    "scripts/status_sudoku_c.py": "d46e10e73fd0a594537d6f2ba335ce61184115cd1be243b7a3d6d3cfcabe1db4",
+    "tests/test_condition_c.py": "14084462e4af934145cad32104cf553c3522c4c645740532bd629bed750e2b78",
+    "tests/test_rescore_precision.py": "65f0b02db042c19a4d30a5d6e73fead38cdbc1bc6a0cbd4c1718c0446279b8b3",
+    "train.py": "edd3c42b5ad3cc5564d0d56dd37b12adbf53857b1327e2a95b5e8fe44a37978a",
+    "yaml_files/sudoku_C_reuse.yaml": "5e85d335fc2258fb5a4e1d62db859c0c0f479f46142e4b07152416dc7a290b0c",
+    "scripts/rescore_sudoku_C_curve.sbatch": "524233dd43de18e350d4488b54e98e9f6a194000b4123b8458c093e27329b19f",
+    "results/sudoku_baselines/bd_full_fp32.json": "84edb2b96b08b06db00c914a13b3a6ffbbc932c32984e1e1272848178ce25784",
+    "scripts/compare_sudoku_c_fp32.py": "566e599b74d3690a8a4f4329e8ed1551ebc6d83015b53f1936a833e3bdc33135",
+    "scripts/diagnose_sudoku_C_precision.sbatch": "c87c04151d4ba09270236595d37db5fa5ceaeb217f7f2fa434ab85db70ab3248"
+  },
+  "remote_patch_sha256": "44ebad38f21e20c46e2ee12896f1e9b106a173aea04184bad733c854684f7d63",
+  "source_files_verified_identical": true,
+  "started_training_jobs": {
+    "335458_0": {
+      "job_id": 335579,
+      "node": "gpu-03",
+      "seed": 1000,
+      "start": "2026-10-22T16:25:12+04:00"
+    },
+    "335458_1": {
+      "job_id": 335458,
+      "node": "gpu-08",
+      "seed": 2000,
+      "start": "2026-10-22T16:40:29+04:00"
+    }
+  },
+  "last_status": {
+    "utc": "2026-10-22T17:32:32.859357+00:00",
+    "runs": [
+      {
+        "seed": 1000,
+        "started": true,
+        "done": true,
+        "step": 53570,
+        "train_time_s": 1971.3541231155396,
+        "loss": 0.1759091466665268,
+        "evaluation_step": 53570,
+        "accuracy": 0.36236236236236236,
+        "val_loss": 0.07747792343569893,
+        "run_info": [
+          "slurm_job=335579 node=gpu-03 start=2026-10-22T16:25:12+04:00",
+          "end=2026-10-22T18:02:53+04:00 exit=0"
+        ],
+        "rescores": [
+          "rescore_bf16_fp32_softmax.json",
+          "rescore_full_fp32.json",
+          "rescore_full_fp32_step10000.json",
+          "rescore_full_fp32_step20000.json",
+          "rescore_full_fp32_step30000.json",
+          "rescore_full_fp32_step40000.json",
+          "rescore_full_fp32_step50000.json",
+          "rescore_legacy_bf16.json"
+        ]
+      },
+      {
+        "seed": 2000,
+        "started": true,
+        "done": true,
+        "step": 53570,
+        "train_time_s": 1972.006804227829,
+        "loss": 0.1939087212085724,
+        "evaluation_step": 53570,
+        "accuracy": 0.8328328328328328,
+        "val_loss": 0.07834613473306715,
+        "run_info": [
+          "slurm_job=335458 node=gpu-08 start=2026-10-22T16:40:29+04:00",
+          "end=2026-10-22T18:19:01+04:00 exit=0"
+        ],
+        "rescores": [
+          "rescore_bf16_fp32_softmax.json",
+          "rescore_full_fp32.json",
+          "rescore_full_fp32_step10000.json",
+          "rescore_full_fp32_step20000.json",
+          "rescore_full_fp32_step30000.json",
+          "rescore_full_fp32_step40000.json",
+          "rescore_full_fp32_step50000.json",
+          "rescore_legacy_bf16.json"
+        ]
+      },
+      {
+        "seed": 3000,
+        "started": true,
+        "done": true,
+        "step": 53570,
+        "train_time_s": 1973.2593839168549,
+        "loss": 0.15902848541736603,
+        "evaluation_step": 53570,
+        "accuracy": 0.9079079079079079,
+        "val_loss": 0.06701515117928711,
+        "run_info": [
+          "slurm_job=335579 node=gpu-03 start=2026-10-22T18:04:18+04:00",
+          "end=2026-10-22T19:41:40+04:00 exit=0"
+        ],
+        "rescores": [
+          "rescore_bf16_fp32_softmax.json",
+          "rescore_full_fp32.json",
+          "rescore_full_fp32_step10000.json",
+          "rescore_full_fp32_step20000.json",
+          "rescore_full_fp32_step30000.json",
+          "rescore_full_fp32_step40000.json",
+          "rescore_full_fp32_step50000.json",
+          "rescore_legacy_bf16.json"
+        ]
+      },
+      {
+        "seed": 4000,
+        "started": true,
+        "done": true,
+        "step": 53570,
+        "train_time_s": 2023.1271946430206,
+        "loss": 0.19484679400920868,
+        "evaluation_step": 53570,
+        "accuracy": 0.8608608608608609,
+        "val_loss": 0.07705226843398098,
+        "run_info": [
+          "slurm_job=335458 node=gpu-08 start=2026-10-22T18:20:24+04:00",
+          "end=2026-10-22T20:00:42+04:00 exit=0"
+        ],
+        "rescores": [
+          "rescore_bf16_fp32_softmax.json",
+          "rescore_full_fp32.json",
+          "rescore_full_fp32_step10000.json",
+          "rescore_full_fp32_step20000.json",
+          "rescore_full_fp32_step30000.json",
+          "rescore_full_fp32_step40000.json",
+          "rescore_full_fp32_step50000.json",
+          "rescore_legacy_bf16.json"
+        ]
+      },
+      {
+        "seed": 5000,
+        "started": true,
+        "done": true,
+        "step": 53570,
+        "train_time_s": 1963.5049941539764,
+        "loss": 0.18951047956943512,
+        "evaluation_step": 53570,
+        "accuracy": 0.5115115115115115,
+        "val_loss": 0.08035645786805617,
+        "run_info": [
+          "slurm_job=335579 node=gpu-03 start=2026-10-22T19:43:05+04:00",
+          "end=2026-10-22T21:20:07+04:00 exit=0"
+        ],
+        "rescores": [
+          "rescore_bf16_fp32_softmax.json",
+          "rescore_full_fp32.json",
+          "rescore_full_fp32_step10000.json",
+          "rescore_full_fp32_step20000.json",
+          "rescore_full_fp32_step30000.json",
+          "rescore_full_fp32_step40000.json",
+          "rescore_full_fp32_step50000.json",
+          "rescore_legacy_bf16.json"
+        ]
+      }
+    ],
+    "queue": "             JOBID      PARTITION                     NAME ST       TIME TIME_LIMIT               NODELIST(REASON)\n",
+    "curve_progress": [
+      {
+        "seed": 1000,
+        "intermediate_scores": 5,
+        "complete": true,
+        "scores": [
+          {
+            "step": 10000,
+            "accuracy": 0.6346346346346347
+          },
+          {
+            "step": 20000,
+            "accuracy": 0.8038038038038038
+          },
+          {
+            "step": 30000,
+            "accuracy": 0.8288288288288288
+          },
+          {
+            "step": 40000,
+            "accuracy": 0.8418418418418419
+          },
+          {
+            "step": 50000,
+            "accuracy": 0.8338338338338338
+          }
+        ]
+      },
+      {
+        "seed": 2000,
+        "intermediate_scores": 5,
+        "complete": true,
+        "scores": [
+          {
+            "step": 10000,
+            "accuracy": 0.6986986986986987
+          },
+          {
+            "step": 20000,
+            "accuracy": 0.8058058058058059
+          },
+          {
+            "step": 30000,
+            "accuracy": 0.8448448448448449
+          },
+          {
+            "step": 40000,
+            "accuracy": 0.8088088088088088
+          },
+          {
+            "step": 50000,
+            "accuracy": 0.7867867867867868
+          }
+        ]
+      },
+      {
+        "seed": 3000,
+        "intermediate_scores": 5,
+        "complete": true,
+        "scores": [
+          {
+            "step": 10000,
+            "accuracy": 0.7037037037037037
+          },
+          {
+            "step": 20000,
+            "accuracy": 0.8808808808808809
+          },
+          {
+            "step": 30000,
+            "accuracy": 0.9329329329329329
+          },
+          {
+            "step": 40000,
+            "accuracy": 0.933933933933934
+          },
+          {
+            "step": 50000,
+            "accuracy": 0.9379379379379379
+          }
+        ]
+      },
+      {
+        "seed": 4000,
+        "intermediate_scores": 5,
+        "complete": true,
+        "scores": [
+          {
+            "step": 10000,
+            "accuracy": 0.6236236236236237
+          },
+          {
+            "step": 20000,
+            "accuracy": 0.8518518518518519
+          },
+          {
+            "step": 30000,
+            "accuracy": 0.9099099099099099
+          },
+          {
+            "step": 40000,
+            "accuracy": 0.934934934934935
+          },
+          {
+            "step": 50000,
+            "accuracy": 0.9209209209209209
+          }
+        ]
+      },
+      {
+        "seed": 5000,
+        "intermediate_scores": 5,
+        "complete": true,
+        "scores": [
+          {
+            "step": 10000,
+            "accuracy": 0.44744744744744747
+          },
+          {
+            "step": 20000,
+            "accuracy": 0.6166166166166166
+          },
+          {
+            "step": 30000,
+            "accuracy": 0.6766766766766766
+          },
+          {
+            "step": 40000,
+            "accuracy": 0.7157157157157157
+          },
+          {
+            "step": 50000,
+            "accuracy": 0.6766766766766766
+          }
+        ]
+      }
+    ]
+  },
+  "precision_diagnostic_status": {
+    "job_id": 335714,
+    "state": "CANCELLED_WHILE_PENDING",
+    "reason": "Final-checkpoint precision comparison already confirmed the BF16 softmax effect; six-point full-FP32 curves remain queued as335627."
+  },
+  "seed1000_precision_result": {
+    "bf16_fp32_softmax": 0.8258258258258259,
+    "full_fp32": 0.8288288288288288,
+    "legacy_bf16": 0.36236236236236236,
+    "step": 53570,
+    "legacy_matches_training_exactly": true
+  },
+  "completed_seed_precision": {
+    "1000": {
+      "legacy_bf16": 0.36236236236236236,
+      "bf16_fp32_softmax": 0.8258258258258259,
+      "full_fp32": 0.8288288288288288
+    },
+    "2000": {
+      "legacy_bf16": 0.8328328328328328,
+      "bf16_fp32_softmax": 0.7747747747747747,
+      "full_fp32": 0.7667667667667668
+    },
+    "3000": {
+      "legacy_bf16": 0.9079079079079079,
+      "bf16_fp32_softmax": 0.9419419419419419,
+      "full_fp32": 0.9379379379379379
+    },
+    "4000": {
+      "legacy_bf16": 0.8608608608608609,
+      "bf16_fp32_softmax": 0.913913913913914,
+      "full_fp32": 0.9169169169169169
+    },
+    "5000": {
+      "legacy_bf16": 0.5115115115115115,
+      "bf16_fp32_softmax": 0.6756756756756757,
+      "full_fp32": 0.6736736736736737
+    }
+  },
+  "fp32_curve_allocation": {
+    "job_id": 335627,
+    "gpus": 2,
+    "time_limit": "00:30:00",
+    "time_limit_updated_after_submission": true,
+    "reason": "Two completed seeds took approximately85 seconds for3 final precision evaluations;25 full-FP32 checkpoint evaluations are expected to fit comfortably in30 minutes."
+  },
+  "final_precision_summary": {
+    "legacy_bf16": {
+      "mean_percent": 69.50950950950951,
+      "sample_sd_percent": 24.2978018752471
+    },
+    "bf16_fp32_softmax": {
+      "mean_percent": 82.64264264264264,
+      "sample_sd_percent": 10.769393841232267
+    },
+    "full_fp32": {
+      "mean_percent": 82.48248248248248,
+      "sample_sd_percent": 10.898276289383261
+    }
+  },
+  "status": "complete",
+  "completed_at_utc": "2026-10-22T17:36:24.969734+00:00",
+  "validation": {
+    "completed_training_seeds": 5,
+    "final_precision_scores": 15,
+    "intermediate_full_fp32_scores": 25,
+    "full_fp32_checkpoint_scores": 30,
+    "legacy_acf_evaluation_rows": 810,
+    "legacy_final_rescores_match_training": true,
+    "all_rescores_share_evaluator_source_and_test_prefix": true,
+    "unit_test_cases_passed": 6,
+    "distributed_smoke_updates": 61,
+    "source_files_verified": 21,
+    "figure_files_verified": 8,
+    "remote_local_statistics_agree": true
+  },
+  "job_outcomes": {
+    "training_array": {
+      "status": "complete",
+      "evidence": "Five per-seed run_info exit=0 records, DONE and RESCORE_DONE markers; training job records aged out of scontrol"
+    },
+    "fp32_curve": {
+      "job_id": 335627,
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "runtime": "00:10:38",
+      "node": "gpu-03"
+    },
+    "analysis": {
+      "job_id": 335628,
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "runtime": "00:00:05",
+      "node": "cn-10"
+    }
+  },
+  "scheduler_accounting_note": "sacct database unavailable (localhost:6819 connection refused); recent evaluation/analysis outcomes confirmed through scontrol, training through per-seed exit records and markers.",
+  "artifacts": {
+    "legacy_acf": "repo/results/sudoku_C_comparison",
+    "full_fp32_bcd": "repo/results/sudoku_C_fp32_comparison",
+    "raw_c": "repo/results/sudoku_C",
+    "plots": "repo/results/sudoku_C_comparison/plots",
+    "checkpoints_remote": "/home/anton.egorov/PUMA-C/runs/sudoku_C_20261022/C"
+  }
+}

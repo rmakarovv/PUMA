@@ -1,0 +1,384 @@
+{
+  "decoder": "top_k_unmasking_1",
+  "training_curve_precision": "legacy_bf16",
+  "budget": 53570,
+  "evaluation_interval": 1000,
+  "seeds": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000
+  ],
+  "standard_deviation": "sample (ddof=1)",
+  "conditions": {
+    "A": {
+      "expected_seeds": 5,
+      "completed_seeds": 5,
+      "final_accuracy": {
+        "n": 5,
+        "mean": 0.8810810810810811,
+        "sample_sd": 0.01760168539766426
+      },
+      "final_val_loss": {
+        "n": 5,
+        "mean": 0.08096119839579824,
+        "sample_sd": 0.007768555898648042
+      },
+      "final_train_time_s": {
+        "n": 5,
+        "mean": 1939.5139385223388,
+        "sample_sd": 20.42180966455544
+      },
+      "final_eval_time_s": {
+        "n": 5,
+        "mean": 3908.261293840408,
+        "sample_sd": 78.00237927517948
+      },
+      "targets": {
+        "50": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 7400,
+            "sample_sd": 547.7225575051662
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 266.4704077720642,
+            "sample_sd": 21.54338532040676
+          }
+        },
+        "75": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 16000,
+            "sample_sd": 2000.0
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 578.5088198661804,
+            "sample_sd": 77.14944027732503
+          }
+        },
+        "90": {
+          "reached_count": 2,
+          "all_seeds_reached": false,
+          "updates": null,
+          "train_time_s": null
+        }
+      }
+    },
+    "C": {
+      "expected_seeds": 5,
+      "completed_seeds": 5,
+      "final_accuracy": {
+        "n": 5,
+        "mean": 0.6950950950950952,
+        "sample_sd": 0.24297801875247102
+      },
+      "final_val_loss": {
+        "n": 5,
+        "mean": 0.07604958713001807,
+        "sample_sd": 0.005207922181507281
+      },
+      "final_train_time_s": {
+        "n": 5,
+        "mean": 1980.6505000114441,
+        "sample_sd": 24.052040741103188
+      },
+      "final_eval_time_s": {
+        "n": 5,
+        "mean": 3893.4064651012422,
+        "sample_sd": 56.93889925761064
+      },
+      "targets": {
+        "50": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 8800,
+            "sample_sd": 3420.526275297414
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 326.7516429901123,
+            "sample_sd": 129.68300113791315
+          }
+        },
+        "75": {
+          "reached_count": 4,
+          "all_seeds_reached": false,
+          "updates": null,
+          "train_time_s": null
+        },
+        "90": {
+          "reached_count": 1,
+          "all_seeds_reached": false,
+          "updates": null,
+          "train_time_s": null
+        }
+      }
+    },
+    "F": {
+      "expected_seeds": 5,
+      "completed_seeds": 5,
+      "final_accuracy": {
+        "n": 5,
+        "mean": 0.9573573573573574,
+        "sample_sd": 0.012594327117158443
+      },
+      "final_val_loss": {
+        "n": 5,
+        "mean": 0.07810867020034858,
+        "sample_sd": 0.008035896969054965
+      },
+      "final_train_time_s": {
+        "n": 5,
+        "mean": 2009.8434446334838,
+        "sample_sd": 25.05842094399582
+      },
+      "final_eval_time_s": {
+        "n": 5,
+        "mean": 3973.007547235489,
+        "sample_sd": 27.35084035721502
+      },
+      "targets": {
+        "50": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 5200,
+            "sample_sd": 447.21359549995793
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 195.01474084854127,
+            "sample_sd": 18.938568638690143
+          }
+        },
+        "75": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 11200,
+            "sample_sd": 1643.1676725154985
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 421.4849390029907,
+            "sample_sd": 59.72321705986756
+          }
+        },
+        "90": {
+          "reached_count": 5,
+          "all_seeds_reached": true,
+          "updates": {
+            "n": 5,
+            "mean": 22600,
+            "sample_sd": 5272.570530585627
+          },
+          "train_time_s": {
+            "n": 5,
+            "mean": 849.1233901977539,
+            "sample_sd": 192.34727344029545
+          }
+        }
+      }
+    }
+  },
+  "paired_differences": {
+    "C-A": {
+      "final_accuracy_difference_pp": {
+        "n": 5,
+        "mean": -18.598598598598596,
+        "sample_sd": 25.70365138869823
+      },
+      "final_val_loss_difference": {
+        "n": 5,
+        "mean": -0.004911611265780169,
+        "sample_sd": 0.006620828304016407
+      },
+      "final_train_time_difference_s": {
+        "n": 5,
+        "mean": 41.136561489105226,
+        "sample_sd": 30.411848891311998
+      },
+      "updates_to_50_difference": {
+        "n": 5,
+        "mean": 1400,
+        "sample_sd": 3847.076812334269
+      },
+      "train_time_to_50_s_difference": {
+        "n": 5,
+        "mean": 60.281235218048096,
+        "sample_sd": 147.07808574627512
+      },
+      "updates_to_75_difference": {
+        "n": 4,
+        "mean": -1000,
+        "sample_sd": 816.496580927726
+      },
+      "train_time_to_75_s_difference": {
+        "n": 4,
+        "mean": -22.669941246509552,
+        "sample_sd": 28.036410178614915
+      },
+      "updates_to_90_difference": {
+        "n": 0,
+        "mean": null,
+        "sample_sd": null
+      },
+      "train_time_to_90_s_difference": {
+        "n": 0,
+        "mean": null,
+        "sample_sd": null
+      }
+    },
+    "C-F": {
+      "final_accuracy_difference_pp": {
+        "n": 5,
+        "mean": -26.226226226226224,
+        "sample_sd": 23.694879894591253
+      },
+      "final_val_loss_difference": {
+        "n": 5,
+        "mean": -0.0020590830703305085,
+        "sample_sd": 0.00799209733670503
+      },
+      "final_train_time_difference_s": {
+        "n": 5,
+        "mean": -29.192944622039796,
+        "sample_sd": 32.39899314953791
+      },
+      "updates_to_50_difference": {
+        "n": 5,
+        "mean": 3600,
+        "sample_sd": 3577.7087639996635
+      },
+      "train_time_to_50_s_difference": {
+        "n": 5,
+        "mean": 131.73690214157105,
+        "sample_sd": 135.17076125543247
+      },
+      "updates_to_75_difference": {
+        "n": 4,
+        "mean": 3750,
+        "sample_sd": 3304.0379335998346
+      },
+      "train_time_to_75_s_difference": {
+        "n": 4,
+        "mean": 135.32599699497223,
+        "sample_sd": 125.0302425218504
+      },
+      "updates_to_90_difference": {
+        "n": 1,
+        "mean": 4000,
+        "sample_sd": null
+      },
+      "train_time_to_90_s_difference": {
+        "n": 1,
+        "mean": 127.4312915802002,
+        "sample_sd": null
+      }
+    }
+  },
+  "checkpoint_rescores_separate": [
+    {
+      "precision": "bf16_fp32_softmax",
+      "step": 53570,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.8264264264264264,
+        "sample_sd": 0.10769393841232267
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 10000,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.6216216216216216,
+        "sample_sd": 0.10390901486231087
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 20000,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.7917917917917918,
+        "sample_sd": 0.103163825573886
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 30000,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.8386386386386386,
+        "sample_sd": 0.10042090734955138
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 40000,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.847047047047047,
+        "sample_sd": 0.09221006935842356
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 50000,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.8312312312312312,
+        "sample_sd": 0.10641869456146218
+      }
+    },
+    {
+      "precision": "full_fp32",
+      "step": 53570,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.8248248248248248,
+        "sample_sd": 0.10898276289383259
+      }
+    },
+    {
+      "precision": "legacy_bf16",
+      "step": 53570,
+      "expected_seeds": 5,
+      "accuracy": {
+        "n": 5,
+        "mean": 0.6950950950950952,
+        "sample_sd": 0.24297801875247102
+      }
+    }
+  ],
+  "warnings": [],
+  "caveats": [
+    "Final statistics include only verified completed runs evaluated at the stated budget; n is reported.",
+    "Threshold means are omitted unless every requested seed has a confirmed crossing.",
+    "A/F baselines use legacy bf16 confidence softmax. C re-scores are never pooled into that comparison.",
+    "BF16 confidence rounding can change reveal order and materially affect accuracy and threshold times; legacy results describe the original numerical decoder.",
+    "A/F full-fp32 checkpoint re-scores are unavailable in these inputs, so C re-scores alone cannot establish an A/C/F ranking under full-fp32 evaluation.",
+    "Checkpoint re-scores provide no new 1000-update learning curve or threshold estimates.",
+    "train_time_s excludes evaluation; eval_time_s is summed separately. Hardware differences limit wall-time comparisons."
+  ]
+}
