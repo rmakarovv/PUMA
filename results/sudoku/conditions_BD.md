@@ -32,8 +32,8 @@ Ablation (`rescore_fp32_20261021/abl_*`, CPU, 300 puzzles, final checkpoints, ex
 | bf16-rounded, random tie-break | 95.7 | 86.0 | 60.7 |
 | bf16 forward, fp32 softmax | 95.3 | 85.0 | 48.3 |
 
-Fix (verified on GPU through the repo eval, `fixcheck_330027.out`; not applied in this branch):
-`p = F.softmax(logits.float(), dim=-1)` in `sampling.mdm_sampling`. On all 11 final checkpoints it
+Fix (verified on GPU through the repo eval, `fixcheck_330027.out`; applied in `sampling.py` on this branch, re-checked in `check_patch_334566.out`):
+`logits = logits.float()` right after the bf16 forward in `sampling.mdm_sampling` (and `mdm_sampling_block`), so softmax, ranking and argmax run in fp32. On all 11 final checkpoints it
 is within 1.2 points of a full fp32 decode.
 
 ## Results (final step, top_k_unmasking_1, exact-grid accuracy, 999 puzzles)

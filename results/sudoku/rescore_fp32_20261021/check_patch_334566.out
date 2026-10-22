@@ -1,0 +1,6 @@
+job=334566 node=gpu-07 git_head=d2f2e9fb502b66c16d1e267b4543fcc5ab644fa7
+ sampling.py | 3 +++
+ 1 file changed, 3 insertions(+)
+sudoku_D_20261019/seed1000/ema_step=53570.pt {'original': 0.3504, 'patched': 0.8328}
+sudoku_B_20261019/seed2000/ema_step=53570.pt {'original': 0.0531, 'patched': 0.5145}
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt {'original': 0.9499, 'patched': 0.956}
