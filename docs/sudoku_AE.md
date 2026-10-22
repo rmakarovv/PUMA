@@ -135,6 +135,14 @@ states instead of 8, and it matches P. So with PUMA's 8-stage schedule, collapse
 One candidate explanation, untested here, is that it shortens each chain, so each update
 draws more fresh puzzles.
 
+**fp32 re-score (2026-10-22).** The training-time eval ranks cells by a softmax of bf16 logits, so
+confidences above ~0.998 round to 1.0 and ties are filled in grid order. `sampling.mdm_sampling` now takes
+`precision: fp32` (the default `bf16` keeps the original protocol). `scripts/reeval_sudoku.py` (jobs
+335151/335152) re-scored all 150 saved EMA checkpoints with an fp32 decode. bf16 re-runs reproduce the
+logged numbers within 0.1 points. Final fp32 accuracy: A 90.7 ± 1.5, E 96.2 ± 0.7, F 96.2 ± 1.3, P 95.7 ± 1.6,
+PN 93.9 ± 1.7. The bf16 eval under-reported A by 2.6 points on average at the end, and E/F/P/PN by at most 0.9.
+The per-1k curves (times to targets) are still bf16 only. Per-checkpoint numbers: `results/sudoku/reeval.csv`.
+
 **Results for analysis.** `results/sudoku/` (tracked in git) has per-eval, per-step and per-run
 CSVs, a summary table, and the raw per-run logs. Regenerate it with
 `python scripts/export_sudoku_results.py`; checkpoints stay in `runs/` on the cluster.
