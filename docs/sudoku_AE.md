@@ -143,6 +143,11 @@ logged numbers within 0.1 points. Final fp32 accuracy: A 90.7 ± 1.5, E 96.2 ± 
 PN 93.9 ± 1.7. The bf16 eval under-reported A by 2.6 points on average at the end, and E/F/P/PN by at most 0.9.
 The per-1k curves (times to targets) are still bf16 only. Per-checkpoint numbers: `results/sudoku/reeval.csv`.
 
+**C (done, Anton Egorov).** Reuse only: each example is reused across the 4 scheduled states with masks
+resampled at every state. Five seeds, 53,570 updates each; results and provenance in `reports/sudoku_C/`.
+Final fp32 accuracy 82.5 ± 10.9 (bf16 as logged 69.5 ± 24.3), val loss 0.076 ± 0.005. In fp32, B (79.4 ±
+17.6), C and D (74.1 ± 17.8) are all below A (90.7 ± 1.5); only the model-chosen reveal order (E, F) beats A.
+
 **Results for analysis.** `results/sudoku/` (tracked in git) has per-eval, per-step and per-run
 CSVs, a summary table, and the raw per-run logs. Regenerate it with
 `python scripts/export_sudoku_results.py`; checkpoints stay in `runs/` on the cluster.
