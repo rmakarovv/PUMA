@@ -12,12 +12,16 @@ python scripts/export_sudoku_results.py            # all runs/sudoku_* experimen
 | Code | Name | Config | Collapse (confidence fast-forwarding) |
 |---|---|---|---|
 | A | random masking | `yaml_files/sudoku_A_random.yaml` | n/a |
+| C | reuse only (masks resampled at every state) | from `reports/sudoku_C/` (patch in `provenance/`) | no |
 | E | confidence progression | `yaml_files/sudoku_E_confidence.yaml` | no (`mode: standard`) |
 | F | Gt-Margin progression | `yaml_files/sudoku_F_gtmargin.yaml` | no (`mode: standard`) |
 | P | PUMA reference (stock) | `yaml_files/sudoku_PUMA_reference.yaml` | yes (`mode: confidence_collapse`, τ = 0.9, K = 10) |
 | PN | PUMA without collapse | `yaml_files/sudoku_PUMA_nocollapse.yaml` | no (`mode: standard`, K = 10) |
 
-All runs use seeds 1000–5000 and 53,570 updates (batch 32 × 2 GPUs). Runs with the same seed
+All runs use seeds 1000–5000 and 53,570 updates (batch 32 × 2 GPUs). C was trained separately (Anton Egorov)
+and is imported from its W&B-style package `reports/sudoku_C/runs.json`; its fp32 checkpoint scores are in
+`reeval.csv` with `reeval` set to that file, and its raw records stay in `reports/sudoku_C/`. B and D are
+not included yet; they exist only in the W&B project `puma-mbz/puma-sudoku`. Runs with the same seed
 start from identical weights.
 
 ## Evaluation protocol
@@ -33,7 +37,7 @@ on the 5% held-out training split, computed with non-EMA weights.
   decoders. `train_time_s` is cumulative wall time excluding evaluation.
 - `train_log.csv`: one row per 100 training steps (`step, epoch, loss, lr, train_time_s`).
   `loss` is the training minibatch loss on rank 0 at that step.
-- `runs.csv`: one row per run.
+- `runs.csv`: one row per run. `source` is the run directory or package the row came from.
   - Provenance: `status, config, slurm_job, node, cuda_visible_devices, gpus, start, end, exit,
     git_head, uncommitted_code_diff`. `gpus` lists every GPU nvidia-smi showed on the node; the
     allocated ones are given by `cuda_visible_devices`.
