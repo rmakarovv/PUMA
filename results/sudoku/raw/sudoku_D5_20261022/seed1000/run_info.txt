@@ -1,0 +1,15 @@
+condition=D5 seed=1000 config=yaml_files/sudoku_D5_floor1.yaml
+slurm_job=336850 node=gpu-03 start=2026-10-23T10:31:40+04:00
+CUDA_VISIBLE_DEVICES=0,1
+0, GPU-4dcdb079-8b54-b7ca-58be-80653934acd6, NVIDIA A100-SXM4-40GB
+1, GPU-497f5ac1-3ffc-4ec6-e373-fdfd268f194d, NVIDIA A100-SXM4-40GB
+2, GPU-4d598231-78bf-2adb-885e-07a9007cf3af, NVIDIA A100-SXM4-40GB
+3, GPU-fe94d827-f8bd-4cf7-81ec-36f413e01fb1, NVIDIA A100-SXM4-40GB
+git_head=ebad40a0b9d7496563a701b9db30c03a3b9e51cf
+?? data/sudoku_new
+?? scripts/run_sudoku_variant_debug.sbatch
+?? smoke.jsonl
+?? yaml_files/sudoku_B5_floor1.yaml
+?? yaml_files/sudoku_D5_floor1.yaml
+?? yaml_files/sudoku_E5_floor1.yaml
+end=2026-10-23T12:06:37+04:00 exit=0

@@ -1,0 +1,18 @@
+vocab check: puzzle uniq [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] sol uniq [1, 2, 3, 4, 5, 6, 7, 8, 9]
+sudoku_B_20261022/seed2000/ema_step=53570.pt single-cell acc 0.8494  n=11348
+  wrong preds that conflict with a peer: 1.000  mean conf wrong 0.452 right 0.9132
+  pred digit hist (wrong): [0, 5, 621, 82, 119, 217, 27, 360, 0, 278, 0]
+  true digit hist (wrong): [0, 209, 117, 124, 220, 83, 311, 132, 369, 144, 0]
+  err rate by row: [np.float64(0.052), np.float64(0.093), np.float64(0.11), np.float64(0.114), np.float64(0.037), np.float64(0.148), np.float64(0.175), np.float64(0.497), np.float64(0.118)]
+  err rate by col: [np.float64(0.365), np.float64(0.211), np.float64(0.108), np.float64(0.049), np.float64(0.052), np.float64(0.1), np.float64(0.099), np.float64(0.146), np.float64(0.227)]
+  puzzles with any error: 200 of 200
+  top puzzle err rates [np.float64(0.21428571428571427), np.float64(0.21428571428571427), np.float64(0.2222222222222222), np.float64(0.22413793103448276), np.float64(0.22413793103448276), np.float64(0.22807017543859648), np.float64(0.23214285714285715), np.float64(0.2545454545454545)]
+sudoku_B_20261022/seed2000/step=53570.pt single-cell acc 0.8456  n=11348
+  wrong preds that conflict with a peer: 1.000  mean conf wrong 0.454 right 0.9093
+  pred digit hist (wrong): [0, 7, 653, 84, 136, 209, 22, 366, 0, 275, 0]
+  true digit hist (wrong): [0, 216, 123, 125, 220, 84, 322, 134, 381, 147, 0]
+  err rate by row: [np.float64(0.053), np.float64(0.103), np.float64(0.116), np.float64(0.119), np.float64(0.038), np.float64(0.151), np.float64(0.177), np.float64(0.5), np.float64(0.121)]
+  err rate by col: [np.float64(0.365), np.float64(0.216), np.float64(0.11), np.float64(0.05), np.float64(0.052), np.float64(0.101), np.float64(0.103), np.float64(0.151), np.float64(0.242)]
+  puzzles with any error: 200 of 200
+  top puzzle err rates [np.float64(0.21818181818181817), np.float64(0.22413793103448276), np.float64(0.22413793103448276), np.float64(0.22807017543859648), np.float64(0.23214285714285715), np.float64(0.23214285714285715), np.float64(0.23636363636363636), np.float64(0.24074074074074073)]
+sudoku_B_20261022/seed3000/ema_step=53570.pt single-cell acc 1.0000  n=11348

@@ -1,0 +1,24 @@
+B seed1000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 62.6/62.9 20k 81.0/81.4 30k 87.4/87.0 40k 89.8/90.3 50k 88.8/89.1 53k 88.9/89.5
+B seed2000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 50.1/49.7 20k 59.4/58.7 30k 63.9/64.4 40k 56.0/57.2 50k 52.7/51.3 53k 51.5/51.1
+B seed3000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 70.9/71.7 20k 84.0/83.7 30k 91.1/91.2 40k 93.0/92.7 50k 93.9/93.9 53k 93.9/93.7
+B seed4000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 47.0/47.4 20k 82.1/81.2 30k 87.7/87.7 40k 87.9/89.2 50k 90.2/89.5 53k 89.7/89.0
+B seed5000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 50.7/50.7 20k 66.7/66.9 30k 70.2/70.8 40k 75.0/74.7 50k 73.9/74.0 53k 73.6/73.8
+B seed6000 DONE last_step=53570 evals=54
+B seed7000 DONE last_step=53570 evals=54
+B seed8000 DONE last_step=53570 evals=54
+B seed9000 DONE last_step=53570 evals=54
+B seed10000 DONE last_step=53570 evals=54
+B old fp32 rescore final: n=5 mean 79.4 sd 17.6 stderr 7.9
+B new logged final:       n=10 mean 81.7 sd 13.2 stderr 4.2
+D seed1000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 60.3/60.2 20k 73.8/73.1 30k 80.0/80.0 40k 81.9/81.1 50k 83.2/83.7 53k 83.3/82.1
+D seed2000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 41.5/42.2 20k 50.8/51.7 30k 55.4/55.3 40k 50.6/51.5 50k 45.8/46.9 53k 46.2/45.8
+D seed3000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 72.7/72.5 20k 86.2/86.3 30k 93.7/94.0 40k 92.8/93.1 50k 92.5/92.9 53k 92.7/92.9
+D seed4000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 55.6/54.4 20k 71.9/71.0 30k 76.5/76.3 40k 71.1/70.9 50k 69.8/70.0 53k 69.0/69.8
+D seed5000 DONE last_step=53570 evals=54 | train-loss max|d| 0.00e+00 over 535 | val-loss max|d| 0.00e+00 over 54 | new vs rescore: 10k 52.1/52.5 20k 74.5/74.8 30k 83.5/83.8 40k 85.2/85.4 50k 81.6/81.9 53k 79.5/80.1
+D seed6000 DONE last_step=53570 evals=54
+D seed7000 DONE last_step=53570 evals=54
+D seed8000 DONE last_step=53570 evals=54
+D seed9000 DONE last_step=53570 evals=54
+D seed10000 DONE last_step=53570 evals=54
+D old fp32 rescore final: n=5 mean 74.1 sd 17.8 stderr 8.0
+D new logged final:       n=10 mean 79.1 sd 13.5 stderr 4.3

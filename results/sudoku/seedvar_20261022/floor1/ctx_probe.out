@@ -1,0 +1,4 @@
+sudoku_B_20261022/seed2000/ema_step=53570.pt far1:86.6 near1:86.6 far2:94.1 near2:91.6 far4:99.6 near4:97.2 far8:100.0 near8:99.4 far14:100.0 near14:100.0 far20:100.0 near20:100.0
+sudoku_D_20261019/seed2000/ema_step=53570.pt far1:82.3 near1:82.3 far2:91.4 near2:88.5 far4:99.1 near4:95.7 far8:99.9 near8:99.4 far14:100.0 near14:100.0 far20:100.0 near20:100.0
+sudoku_B_20261022/seed5000/ema_step=53570.pt far1:96.2 near1:96.2 far2:98.8 near2:99.1 far4:99.9 near4:99.9 far8:100.0 near8:100.0 far14:100.0 near14:100.0 far20:100.0 near20:100.0
+sudoku_Erepro_20261019/seed1000/ema_step=53570.pt far1:100.0 near1:100.0 far2:100.0 near2:100.0 far4:100.0 near4:100.0 far8:100.0 near8:100.0 far14:100.0 near14:100.0 far20:100.0 near20:100.0
