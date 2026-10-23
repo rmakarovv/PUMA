@@ -1,0 +1,23 @@
+{
+  "preparation_job": 336806,
+  "smoke_job": 336808,
+  "training_array": 336816,
+  "analysis_job": 336820,
+  "experiment": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023",
+  "status": "queued_after_successful_cpu_preparation",
+  "maximum_concurrent_gpus": 4,
+  "run_count": 15,
+  "updates_per_run": 30000,
+  "seeds": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000
+  ],
+  "reuse_states": [
+    2,
+    4,
+    8
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "source_hashes_match": true,
+  "heldout_hash_matches": true,
+  "indices_hash_matches": true,
+  "runs": [
+    {
+      "variant": "C-K2",
+      "seed": 1000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K4",
+      "seed": 1000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K8",
+      "seed": 1000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K4",
+      "seed": 2000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K8",
+      "seed": 2000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K2",
+      "seed": 2000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K8",
+      "seed": 3000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K2",
+      "seed": 3000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K4",
+      "seed": 3000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K2",
+      "seed": 4000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K4",
+      "seed": 4000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K8",
+      "seed": 4000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K4",
+      "seed": 5000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K8",
+      "seed": 5000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    },
+    {
+      "variant": "C-K2",
+      "seed": 5000,
+      "done": true,
+      "failed": false,
+      "config_hash_matches": true,
+      "final_ema_exists": true,
+      "final_checkpoint_exists": true
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "conditions": [
+    {
+      "variant": "C-K2",
+      "completed": 5,
+      "requested": 5,
+      "mean_accuracy_percent": 39.921875,
+      "sample_sd_pp": 11.12454291272634
+    },
+    {
+      "variant": "C-K4",
+      "completed": 5,
+      "requested": 5,
+      "mean_accuracy_percent": 83.984375,
+      "sample_sd_pp": 8.29417246106957
+    },
+    {
+      "variant": "C-K8",
+      "completed": 5,
+      "requested": 5,
+      "mean_accuracy_percent": 88.33984375,
+      "sample_sd_pp": 1.6262038246771318
+    }
+  ],
+  "limits": [
+    "Schedule length changes both mask-count distribution and example lifetime",
+    "Pilot validation scores are not comparable to the original test-set scores",
+    "Existing 53570-update C results remain a separate fixed baseline",
+    "This pilot does not include F and cannot establish a C-versus-F improvement"
+  ],
+  "initial_weight_hashes": {
+    "1000": [
+      "9ee5e23e9aff933e3f509b685cf5957c5ae67eb676d2e1a45613780421e145d6"
+    ],
+    "2000": [
+      "68dfb1a90bdc5780587718346486b05b48fbb007326cb93a4718f37c5b9218d9"
+    ],
+    "3000": [
+      "0f91faf7b114be3516af3f75e966c608ab629ab1de4cd40941a14d3d7537d2fb"
+    ],
+    "4000": [
+      "94a9042dfc13b91fe25a9610331f986a7c0ff3d57cbfd9b359ef3804d2f99f7b"
+    ],
+    "5000": [
+      "bd2e226dcb678e6160184a90a6dc649a276fb1a9e5cf584944b38307116db35f"
+    ]
+  }
+}

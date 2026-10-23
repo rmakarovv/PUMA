@@ -1,0 +1,27 @@
+{
+  "variant": "C-K8",
+  "seed": 2000,
+  "smoke": false,
+  "job_id": "336845",
+  "array_task_id": "0",
+  "node": "gpu-08",
+  "gpus": [
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "start_utc": "2026-10-22T21:25:53.380259+00:00",
+  "command": [
+    "/home/anton.egorov/PUMA-C/.venv/bin/python",
+    "-m",
+    "torch.distributed.run",
+    "--standalone",
+    "--nproc_per_node=2",
+    "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/source/train.py",
+    "--cfg",
+    "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed2000/launch_config.yaml"
+  ],
+  "exit_code": 0,
+  "elapsed_s": 1195.3592403820949,
+  "end_utc": "2026-10-22T21:45:48.740108+00:00",
+  "final_accuracy": 0.869140625
+}

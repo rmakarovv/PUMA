@@ -1,0 +1,12 @@
+{
+  "verified_runs": 15,
+  "verified_evaluations": 90,
+  "source_and_data_hashes_match": true,
+  "paired_initial_weights_match": true,
+  "summary_recomputed_from_raw_logs": true,
+  "last_completion_utc": "2026-10-22T23:34:44.888555+00:00",
+  "nodes": [
+    "gpu-03",
+    "gpu-08"
+  ]
+}

@@ -1,0 +1,76 @@
+model:
+  vocab_size: 11
+  hidden_size: 256
+  intermediate_size: 768
+  num_layers: 8
+  num_attention_heads: 8
+  num_kv_heads: 8
+  max_position: 81
+  rms_norm_eps: 1.0e-06
+  dropout: 0.0
+training:
+  strategy: progressive
+  diffusion_layout: full
+  prompt_only_reset: true
+  confidence_threshold: null
+  mode: standard
+  mask_schedule:
+  - 81
+  - 41
+  mask_construction: independent
+  K: 20
+  reference_length: 81
+  random_tie_break: true
+  data_ratio: 1.0
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  num_epochs: 2
+  max_grad_norm: 1.0
+  batch_size: 32
+  warmup_steps: 1000
+  logging_steps: 100
+  eval_steps: 5000
+  save_steps: 5000
+  ema: 0.9999
+  eos_id: null
+  seed: 5000
+  record_initial_state: true
+  max_steps: 30000
+  ckpt_dir: /home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed5000
+validation:
+  val_dir: /home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/validation
+  ratio: 1.0
+  sampling:
+    temperature: 0.0
+    confidence:
+    - top_k
+    unmasking_num:
+    - 1
+  cache_file: /home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/validation/heldout_mdm.npy
+  heldout_indices_file: /home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/validation/heldout_indices.npy
+  precision: full_fp32
+  rng_seed: 4601
+data:
+  mask_id: 10
+  dataset: sudoku
+  data_dir: /home/anton.egorov/PUMA-C/data/sudoku_new
+  sudoku_type: new
+  val_ratio: 0.05
+  seed: 2026
+  mmap: false
+  training:
+    per_gpu_batch_size: 32
+    cpus: 4
+wandb:
+  wandb: false
+  project: mdm-pretraining
+  name: sudoku-C-reuse
+  entity: your-entity-here
+experiment:
+  name: sudoku_C_pilot_20261023
+  condition: C_pilot
+  variant: C-K2
+  reuse_states: 2
+  factor: schedule_and_example_lifetime
+  evaluation_split: train_holdout
+  paired_seed: 5000

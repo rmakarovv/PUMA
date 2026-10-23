@@ -1,0 +1,19 @@
+{
+  "source_count": 1804462,
+  "training_count": 1714239,
+  "original_validation_count": 90223,
+  "validation_unique_puzzles": 90223,
+  "validation_unique_puzzles_overlapping_training": 0,
+  "selected_count": 1024,
+  "split_seed": 2026,
+  "val_ratio": 0.05,
+  "split_algorithm": "torch.randperm; training prefix, validation suffix (same as split_sudoku)",
+  "selection": "first distinct validation puzzles absent from every training puzzle",
+  "source_cache": "/home/anton.egorov/PUMA-C/data/sudoku_new/train_mdm.npy",
+  "source_cache_sha256": "2f33788ea6059782bfd8a9e94f442148eb076c319ca23a28e1254ac92cc9bdfa",
+  "heldout_sha256": "ac2d751b73893db8684e4a62520ac71918668825f3abbfdef6a71a47b08b5f40",
+  "indices_sha256": "927cfbaf0d00a99740418f7fd87f5a1bc7023ae0f035f545ab9e3bcb4a6eeb42",
+  "generation_source": "held-out training split; supplied test set is not used",
+  "puzzle_overlap_with_training": 0,
+  "torch_version": "2.13.0+cu129"
+}

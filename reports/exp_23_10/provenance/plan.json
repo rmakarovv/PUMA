@@ -1,0 +1,187 @@
+{
+  "created_utc": "2026-10-22T20:26:59.490327+00:00",
+  "experiment": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023",
+  "git_head": "fe967e2bbb613ed5a1aab903e7c5e111d159b0a6",
+  "source": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/source",
+  "seeds": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000
+  ],
+  "schedules": {
+    "2": [
+      81,
+      41
+    ],
+    "4": [
+      81,
+      61,
+      41,
+      21
+    ],
+    "8": [
+      81,
+      71,
+      61,
+      51,
+      41,
+      31,
+      21,
+      11
+    ]
+  },
+  "maximum_updates": 30000,
+  "scheduler_updates": 53570,
+  "training_precision": "bf16_mixed",
+  "evaluation_precision": "full_fp32_no_tf32",
+  "training_batch_global": 64,
+  "world_size": 2,
+  "validation_puzzles": 1024,
+  "primary_endpoint": "mean final validation accuracy at 30000 updates; all five seeds",
+  "sample_standard_deviation_ddof": 1,
+  "limits": [
+    "Schedule length changes both mask-count distribution and example lifetime",
+    "Pilot validation scores are not comparable to the original test-set scores",
+    "Existing 53570-update C results remain a separate fixed baseline",
+    "This pilot does not include F and cannot establish a C-versus-F improvement"
+  ],
+  "runs": [
+    {
+      "variant": "C-K2",
+      "states": 2,
+      "seed": 1000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K2-seed1000.yaml",
+      "config_sha256": "985c829e56772b4293a2a49eed60a80e74e7d4064d829faced3d1e7f94d70938",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed1000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K4",
+      "states": 4,
+      "seed": 1000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K4-seed1000.yaml",
+      "config_sha256": "c585b21ca2fe66eaef2d599fd0dbab96df43c9bc3921632ed01f094e71001f0f",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K4/seed1000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K8",
+      "states": 8,
+      "seed": 1000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K8-seed1000.yaml",
+      "config_sha256": "db931e3ffb1dbf056a6d3927083ef3ff8e5ad00b04730377f52f5e533026a11d",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed1000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K4",
+      "states": 4,
+      "seed": 2000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K4-seed2000.yaml",
+      "config_sha256": "209b8b606cdd36a4394e2fc4be38ff85318ad9a647605de88142f43b6860f1c7",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K4/seed2000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K8",
+      "states": 8,
+      "seed": 2000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K8-seed2000.yaml",
+      "config_sha256": "1f1f8d62516c666d9a265272bdb6752e334bdd2b76fb0b45952426dd5a67dbe7",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed2000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K2",
+      "states": 2,
+      "seed": 2000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K2-seed2000.yaml",
+      "config_sha256": "14094535d1f8bc1ba7f60032e2a889bdc5e2a587ef683d5f33c0185cb9793ee9",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed2000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K8",
+      "states": 8,
+      "seed": 3000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K8-seed3000.yaml",
+      "config_sha256": "00f949e3a7e9588aec674eec662c39f619f28a5c4730b54c436b7e9fe6f314ac",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed3000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K2",
+      "states": 2,
+      "seed": 3000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K2-seed3000.yaml",
+      "config_sha256": "289568479fcc8f03cf3b6b2db42d70f9dc1e38ea100968bec9f026288dfef72d",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed3000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K4",
+      "states": 4,
+      "seed": 3000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K4-seed3000.yaml",
+      "config_sha256": "f924e9beb13af58af033868677e1ec6d74931242d03f08207fdeb8193f82a46c",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K4/seed3000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K2",
+      "states": 2,
+      "seed": 4000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K2-seed4000.yaml",
+      "config_sha256": "334cab0b5c49c12edec8549b46572f4766a8e8e42d293131d6a3feed1fa6613e",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed4000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K4",
+      "states": 4,
+      "seed": 4000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K4-seed4000.yaml",
+      "config_sha256": "ed1b8c44fbffdca53f6542df55039a4d91317a9a087bd58c14238db2792380f6",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K4/seed4000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K8",
+      "states": 8,
+      "seed": 4000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K8-seed4000.yaml",
+      "config_sha256": "e6fc1b4d265b0d1334c1d2692f281f077bc1c841b58ee9a77eee47078f84dbb0",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed4000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K4",
+      "states": 4,
+      "seed": 5000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K4-seed5000.yaml",
+      "config_sha256": "32d513a5f3615d36021956c7fbf4ef08a2d749aaffc493fb78c11cf7343e421d",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K4/seed5000",
+      "worker": 0
+    },
+    {
+      "variant": "C-K8",
+      "states": 8,
+      "seed": 5000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K8-seed5000.yaml",
+      "config_sha256": "2422d0d09f9cffcd0cbd1b9c9768903ad87b00aaccf8c68e67dfe5458f31fc89",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K8/seed5000",
+      "worker": 1
+    },
+    {
+      "variant": "C-K2",
+      "states": 2,
+      "seed": 5000,
+      "config": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/configs/C-K2-seed5000.yaml",
+      "config_sha256": "b49fbe331b93730df4982c106dc9737ca82ffc5bd9970d0477448e484c7ef2d2",
+      "output": "/home/anton.egorov/PUMA-C/runs/sudoku_C_pilot_20261023/C-K2/seed5000",
+      "worker": 0
+    }
+  ]
+}
