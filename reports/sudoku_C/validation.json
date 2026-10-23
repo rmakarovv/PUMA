@@ -1,0 +1,15 @@
+{
+  "actual_wandb_upload_performed": false,
+  "dry_run_local": "passed",
+  "dry_run_cluster_python311": "passed",
+  "installed_sdk_version": "0.30.0",
+  "validation_test_cases": 3,
+  "validation_tests_passed": 3,
+  "seed_runs": 5,
+  "merged_history_rows": 2680,
+  "bf16_evaluations": 270,
+  "full_fp32_evaluations": 30,
+  "mixed_softmax_final_evaluations": 5,
+  "prepared_remote_path": "/home/anton.egorov/PUMA-C/runs/wandb_C_handoff",
+  "public_api_calls_tested_online": false
+}

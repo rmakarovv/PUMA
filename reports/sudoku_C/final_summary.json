@@ -1,0 +1,14 @@
+{
+  "bf16_accuracy_percent": {
+    "mean": 69.50950950950951,
+    "sample_sd": 24.2978018752471
+  },
+  "bf16_forward_fp32_softmax_accuracy_percent": {
+    "mean": 82.64264264264264,
+    "sample_sd": 10.769393841232267
+  },
+  "full_fp32_accuracy_percent": {
+    "mean": 82.48248248248248,
+    "sample_sd": 10.898276289383261
+  }
+}
