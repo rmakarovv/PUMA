@@ -5,3 +5,4 @@ runs/
 ckpts/
 wandb/
 __pycache__/
+results/sudoku/*.md
