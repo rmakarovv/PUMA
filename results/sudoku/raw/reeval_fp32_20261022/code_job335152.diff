@@ -1,0 +1,24 @@
+diff --git a/sampling.py b/sampling.py
+index 92a44a3..4463c58 100644
+--- a/sampling.py
++++ b/sampling.py
+@@ -104,6 +104,10 @@ def mdm_sampling(model, xt, mask_id, sampling_cfg, device: torch.device = None,
+     temperature = sampling_cfg.temperature
+     confidence = sampling_cfg.confidence
+     unmasking_num = sampling_cfg.unmasking_num
++    # "bf16" (default, original protocol) runs the model under bf16 autocast, so the confidences are bf16:
++    # values >= ~0.998 round to 1.0 and the tie is broken by position in topk. "fp32" decodes in fp32.
++    precision = getattr(sampling_cfg, "precision", "bf16")
++    assert precision in ("bf16", "fp32"), f"invalid sampling precision {precision}"
+ 
+     # shape
+     B, L = xt.shape
+@@ -123,7 +127,7 @@ def mdm_sampling(model, xt, mask_id, sampling_cfg, device: torch.device = None,
+             break
+ 
+         # calculate logits
+-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled = torch.cuda.is_available()):
++        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled = torch.cuda.is_available() and precision == "bf16"):
+             logits = model(torch.cat([xt_t1, xt], dim=1) if arm_init else xt) # [B, L, V]
+         if arm_init:
+             logits = logits[:, :-1, :]
