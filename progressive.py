@@ -109,11 +109,17 @@ class PhasedMasking:
     states (no interval sampling); K is then unused.
 
     reveal_score picks which masked tokens a scheduled step reveals: "confidence"
-    (max_v p(v), the default) or "gt_margin" (p(x0) - max_{v != x0} p(v), the
-    ground-truth margin of Asano et al., which uses the clean label).
+    (max_v p(v), the default), "gt_margin" (p(x0) - max_{v != x0} p(v), the
+    ground-truth margin of Asano et al., which uses the clean label) or "random"
+    (uniform over the remaining masked tokens, ignoring the model).
+
+    reuse_examples=False (requires mask_schedule) gives the schedule-only control: every
+    update draws a fresh example for each batch slot and masks a uniformly random subset
+    of the stage's mask count. Slots keep their staggered stage and advance one stage per
+    update, so the mask counts match the reuse conditions, but nothing is reused or nested.
     """
 
-    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence"):
+    def __init__(self, train_loader: DataLoader, batch_size: int, mask_id: int, K: int, device: torch.device, L: int, mode: str = "standard", confidence_threshold: Optional[float] = None, eos_id: Optional[int] = None, reference_length: Optional[int] = None, prompt_only_reset: bool = False, mask_schedule: Optional[List[int]] = None, random_tie_break: bool = False, reveal_score: str = "confidence", reuse_examples: bool = True):
         if reference_length is None:
             raise ValueError("reference_length must be configured explicitly")
         self.train_loader = train_loader
@@ -129,13 +135,15 @@ class PhasedMasking:
         self.mask_schedule = None if mask_schedule is None else [int(m) for m in mask_schedule]
         self.random_tie_break = random_tie_break
         self.reveal_score = reveal_score
+        self.reuse_examples = reuse_examples
         assert mode in ["standard" , "confidence_collapse"], "invalid/deprecated mode"
-        assert reveal_score in ["confidence", "gt_margin"], f"invalid reveal_score {reveal_score}"
+        assert reveal_score in ["confidence", "gt_margin", "random"], f"invalid reveal_score {reveal_score}"
         if self.mask_schedule is not None:
             m = self.mask_schedule
             assert mode == "standard", "mask_schedule fixes the reveal counts; use mode=standard"
             assert m[0] == reference_length and all(a > b > 0 for a, b in zip(m, m[1:])), \
                 f"mask_schedule must start at reference_length and strictly decrease to > 0, got {m}"
+        assert reuse_examples or self.mask_schedule is not None, "reuse_examples=False needs a mask_schedule"
 
         self._configure_stage_partition(K)
 
@@ -285,6 +293,16 @@ class PhasedMasking:
         B, L, V = log_probs.shape
         device = self.device
 
+        if not self.reuse_examples:
+            # schedule-only control: fresh example and independent random mask for every slot
+            next_stage = (self.state['stage'] + 1) % self.num_stages
+            self.x0, self.xt, new_masks, new_L_eff = self._refill_pool(B, next_stage)
+            self.state['prompt_mask'] = new_masks
+            self.state['L_eff'] = new_L_eff
+            self.state['stage'] = next_stage
+            self.state['t'] += 1
+            return
+
         # stage indices for the current update
         next_stage = (self.state['stage'] + 1) % self.num_stages
         replace_on_wrap = (next_stage == 0)
@@ -309,6 +327,8 @@ class PhasedMasking:
                 probs = log_probs.exp()
                 p_true = probs.gather(2, self.x0.unsqueeze(-1)).squeeze(-1)
                 score = p_true - probs.scatter(2, self.x0.unsqueeze(-1), -1.0).max(dim = 2)[0] # p(x0) - max_{v != x0} p(v)
+            elif self.reveal_score == "random":
+                score = torch.rand_like(score)
             score_conf = torch.where(mask_idx , score, torch.finfo(log_probs.dtype).min) # [B, L]
             if self.random_tie_break:
                 # break exact confidence ties uniformly at random instead of by position index
