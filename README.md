@@ -87,6 +87,30 @@ Training logs and checkpoints are saved according to the paths specified in your
 - `model`: our Qwen2-style attention implementations
 - `eval`: eval util functions for Sudoku / TinyGSM
 
+## Sudoku progression conditions
+This fork adds Sudoku training conditions that separate the parts of PUMA. All of them use PUMA's Sudoku model and hyperparameters, and each one is a config in `yaml_files/`.
+
+| Code | Config | Training grids |
+|---|---|---|
+| A | `sudoku_A_random.yaml` | Random masking (standard MDM training) |
+| B | `sudoku_B_schedule.yaml` | Fixed 4-stage mask schedule, new puzzle every update |
+| D | `sudoku_D_random.yaml` | Same puzzle for 4 stages, revealed cells stay revealed, random reveal order |
+| E | `sudoku_E_confidence.yaml` | As D, but the most confident cells are revealed first |
+| F | `sudoku_F_gtmargin.yaml` | As D, but cells are ranked by the ground-truth margin |
+| P | `sudoku_PUMA_reference.yaml` | PUMA as published |
+| PN | `sudoku_PUMA_nocollapse.yaml` | PUMA without confidence fast-forwarding |
+
+The `*5_floor1.yaml` configs add a fifth stage with a single hidden cell.
+
+Setup and training on Slurm, from the repo root:
+```bash
+BASE_PYTHON=/path/to/python3.11 bash scripts/setup_env.sh
+bash scripts/download_sudoku.sh
+mkdir -p runs/logs && sbatch scripts/preprocess_sudoku.sbatch
+EXP_DIR=runs/sudoku sbatch scripts/run_sudoku_AE.sbatch A:1000 E:1000 F:1000
+```
+`run_sudoku_AE.sbatch` takes `COND:SEED` items for A, E, F, P and PN. B and D have their own launchers (`scripts/run_sudoku_B.sbatch`, `scripts/run_sudoku_D.sbatch`). `scripts/reeval_sudoku.py` re-scores saved checkpoints with an fp32 decode, and `scripts/export_sudoku_results.py` collects all runs into the CSV files in `results/sudoku/`.
+
 ## Citation
 If you find this repository helpful, please consider citing our paper:
 
