@@ -237,7 +237,7 @@ def main():
                   "",
                   f"From `reeval.csv` (`scripts/reeval_sudoku.py`): the same eval with an fp32 decode. The bf16 eval used "
                   f"during training ranks cells by bf16 confidences, so near-1 confidences tie and are broken by position. "
-                  f"bf16 re-runs reproduce the logged accuracy within {100 * max(repro):.2f} points "
+                  f"bf16 re-runs differ from the logged accuracy by at most {100 * max(repro):.2f} points "
                   f"({len(repro)} checkpoints)." if repro else "",
                   "",
                   "| Condition | Final acc. fp32 (%) | Final acc. bf16 as logged (%) | " + " | ".join(f"fp32 at {s // 1000}k" for s in steps) + " |",

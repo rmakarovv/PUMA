@@ -46,7 +46,7 @@ def main():
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--gpu", type=int, default=0, help="logical GPU index within the allocation")
     ap.add_argument("--precisions", nargs="+", default=["fp32"])
-    ap.add_argument("--bf16-final", action="store_true", help="also evaluate final checkpoints in bf16 (reproduction check)")
+    ap.add_argument("--bf16-final", action="store_true", help="also evaluate final checkpoints with the bf16 forward")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
