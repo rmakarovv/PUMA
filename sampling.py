@@ -104,8 +104,8 @@ def mdm_sampling(model, xt, mask_id, sampling_cfg, device: torch.device = None, 
     temperature = sampling_cfg.temperature
     confidence = sampling_cfg.confidence
     unmasking_num = sampling_cfg.unmasking_num
-    # "bf16" (default, original protocol) runs the model under bf16 autocast, so the confidences are bf16:
-    # values >= ~0.998 round to 1.0 and the tie is broken by position in topk. "fp32" decodes in fp32.
+    # "bf16" (default) runs the model forward under bf16 autocast, "fp32" runs it in fp32. Cells are ranked in fp32
+    # either way (see below).
     precision = getattr(sampling_cfg, "precision", "bf16")
     assert precision in ("bf16", "fp32"), f"invalid sampling precision {precision}"
 
@@ -129,6 +129,8 @@ def mdm_sampling(model, xt, mask_id, sampling_cfg, device: torch.device = None, 
         # calculate logits
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled = torch.cuda.is_available() and precision == "bf16"):
             logits = model(torch.cat([xt_t1, xt], dim=1) if arm_init else xt) # [B, L, V]
+        # rank in fp32: bf16 probabilities round everything >= ~0.998 to 1.0, and topk then breaks the ties by position
+        logits = logits.float()
         if arm_init:
             logits = logits[:, :-1, :]
         logits_with_noise = gumbel_softmax(logits, temperature = temperature)
@@ -188,6 +190,7 @@ def mdm_sampling_block(model, xt, block_size, mask_id, sampling_cfg, device: tor
 
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled = torch.cuda.is_available()):
                 logits = model(xt[:, : e]) # [B, e, V]
+            logits = logits.float() # rank in fp32 (see mdm_sampling)
 
             logits_with_noise = gumbel_softmax(logits[:, s:e, :], temperature = temperature) # [B, e, V]
             p = F.softmax(logits[:, s:e, :], dim = -1)
